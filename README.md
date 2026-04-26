@@ -12,27 +12,27 @@ Developed from scratch, it implements physically-based rendering (PBR), image-ba
 
 ### Main Interface
 <p align="left">
-  <img src="./docs/main_en.png" width="70%"/>
+  <img src="./docs/main_en.png" width="90%"/>
 </p>
 
 ### G-Buffer Visualization
 <p align="left">
-  <img src="./docs/gbuffer_en.png" width="70%"/>
+  <img src="./docs/gbuffer_en.png" width="90%"/>
 </p>
 
 ### PBR
 <p align="left">
-  <img src="./docs/pbr_en.png" width="70%"/>
+  <img src="./docs/pbr_en.png" width="90%"/>
 </p>
 
 ### Reload (Model/Env Map)
 <p align="left">
-  <img src="./docs/reload_en.png" width="70%"/>
+  <img src="./docs/reload_en.png" width="90%"/>
 </p>
 
 ### Post Processing (HDR)
 <p align="left">
-  <img src="./docs/exposure_en.png" width="70%"/>
+  <img src="./docs/exposure_en.png" width="90%"/>
 </p>
 ---
 
