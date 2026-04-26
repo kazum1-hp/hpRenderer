@@ -1,5 +1,7 @@
 # hpRenderer
 
+[English](./README.md) | [日本語](./README_JP.md)
+
 A lightweight real-time renderer built with OpenGL, supporting both forward and deferred rendering pipelines.
 
 Developed from scratch, it implements physically-based rendering (PBR), image-based lighting (IBL), and HDR lighting, with a focus on extensible rendering architecture and core techniques used in modern game engines.
@@ -10,27 +12,27 @@ Developed from scratch, it implements physically-based rendering (PBR), image-ba
 
 ### Main Interface
 <p align="left">
-  <img src="./docs/main.png" width="70%"/>
+  <img src="./docs/main_en.png" width="70%"/>
 </p>
 
 ### G-Buffer Visualization
 <p align="left">
-  <img src="./docs/gbuffer.png" width="70%"/>
+  <img src="./docs/gbuffer_en.png" width="70%"/>
 </p>
 
 ### PBR
 <p align="left">
-  <img src="./docs/pbr.png" width="70%"/>
+  <img src="./docs/pbr_en.png" width="70%"/>
 </p>
 
 ### Reload (Model/Env Map)
 <p align="left">
-  <img src="./docs/reload.png" width="70%"/>
+  <img src="./docs/reload_en.png" width="70%"/>
 </p>
 
 ### Post Processing (HDR)
 <p align="left">
-  <img src="./docs/exposure.png" width="70%"/>
+  <img src="./docs/exposure_en.png" width="70%"/>
 </p>
 ---
 
@@ -192,9 +194,9 @@ hpRenderer/
 
 ---
 
-##  License
+## License
 
 This project is licensed under the MIT License.  
-See the LICENSE file for details.
+See the [LICENSE](./LICENSE) file for details.
 
 This project is developed for learning and portfolio purposes.
