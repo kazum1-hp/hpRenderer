@@ -1,0 +1,57 @@
+# ========================
+# Build directories
+# ========================
+build/
+Build/
+out/
+
+# ========================
+# CMake
+# ========================
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# ========================
+# Visual Studio
+# ========================
+.vs/
+*.vcxproj.user
+*.vcxproj.filters
+*.sln.docstates
+
+# ========================
+# Binaries
+# ========================
+*.exe
+*.dll
+*.lib
+*.so
+*.dylib
+
+# ========================
+# Debug / Release folders
+# ========================
+Debug/
+Release/
+x64/
+x86/
+
+# ========================
+# Logs / temp
+# ========================
+*.log
+*.tmp
+
+# ========================
+# OS files
+# ========================
+.DS_Store
+Thumbs.db
+
+# ========================
+# ImGui (optional settings)
+# ========================
+imgui.ini
