@@ -194,6 +194,15 @@ hpRenderer/
 
 ---
 
+##  Acknowledgements
+
+Some assets used in this project are sourced from [Poly Haven](https://polyhaven.com/), which provides high-quality HDRIs, textures, and 3D models under free licenses.
+
+This project was developed with reference to publicly available resources such as [LearnOpenGL](https://learnopengl.com/), while extending and integrating the concepts into a custom rendering pipeline.
+    
+
+---
+
 ## License
 
 This project is licensed under the MIT License.  
