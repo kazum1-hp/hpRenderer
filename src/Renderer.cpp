@@ -106,9 +106,19 @@ void Renderer::init()
     }
 
     modelShader->use();
-    modelShader->setUniform("irradianceMap", 9);
-    modelShader->setUniform("prefilterMap", 10);
-    modelShader->setUniform("brdfLUT", 11);
+    modelShader->setUniform("depthMap", 0);
+    for (int i = 0; i < 4; ++i)
+    {
+        modelShader->setUniform("shadowMap[" + std::to_string(i) + "]", 1 + i);
+    }
+    modelShader->setUniform("diffuse", 5);
+    modelShader->setUniform("specular", 6);
+    modelShader->setUniform("normal", 7);
+    modelShader->setUniform("height", 8);
+    modelShader->setUniform("arm", 9);
+    modelShader->setUniform("irradianceMap", 11);
+    modelShader->setUniform("prefilterMap", 12);
+    modelShader->setUniform("brdfLUT", 13);
 
     for (int i = 0; i < scene.GetPointLights().size(); i++)
     {
@@ -133,6 +143,11 @@ void Renderer::init()
     lightPassShader->setUniform("gARM", 3); // ao,roughness,metallic packed
     lightPassShader->setUniform("gGeoNormal", 4);
     lightPassShader->setUniform("gDepth", 5);
+    lightPassShader->setUniform("depthMap", 6);
+    for (int i = 0; i < 4; ++i)
+    {
+        lightPassShader->setUniform("shadowMap[" + std::to_string(i) + "]", 7 + i);
+    }
 
     // IBL samplers
     lightPassShader->setUniform("irradianceMap", 11);
@@ -515,11 +530,11 @@ void Renderer::forwardPass(Scene& scene)
     }
 
     auto& env = scene.GetEnvironment();
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, env.maps.irradianceMap);
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, env.maps.prefilterMap);
     glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, env.maps.irradianceMap);
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, env.maps.prefilterMap);
+    glActiveTexture(GL_TEXTURE13);
     glBindTexture(GL_TEXTURE_2D, env.maps.brdfLUT);
 
     for (const auto& obj : scene.GetObjects()) {
@@ -846,7 +861,7 @@ void Renderer::lightPass(Scene& scene)
             {
                 glViewport(
                     0,                  // x
-                    framebufferHeight - (index + 1) * debugH,  // y£¨The OpenGL origin of the coordinate axis is in the lower left corner.£©
+                    framebufferHeight - (index + 1) * debugH,  // OpenGL origin is at the lower left.
                     debugW,
                     debugH
                 );
@@ -875,37 +890,39 @@ void Renderer::lightPass(Scene& scene)
 
 void Renderer::drawMesh(const Mesh& mesh, Shader& shader) const
 {
-
-    GLuint slot = 6; // 0 = depthMap, 1-4 = shadowMap
-
     for (const auto& tex : mesh.getTexture())
     {
-        tex->bind(slot);
-
+        GLuint slot = 0;
         std::string uniformName;
 
         switch (tex->getType())
         {
             case TextureType::Diffuse:
                 uniformName = "diffuse";
+                slot = 5;
                 break;
             case TextureType::Specular:
                 uniformName = "specular";
+                slot = 6;
                 break;
             case TextureType::Normal:
                 uniformName = "normal";
-                //hasNormal = true;
+                slot = 7;
                 break;
             case TextureType::Height:
                 uniformName = "height";
+                slot = 8;
                 break;
             case TextureType::ARM:
                 uniformName = "arm";
+                slot = 9;
                 break;
+            default:
+                continue;
         }
-        //std::cout << "Binding Uniform: " << uniformName << " to Slot: " << slot << std::endl;
+
+        tex->bind(slot);
         shader.setUniform(uniformName, static_cast<int>(slot));
-        slot++;
     }
 }
 
@@ -1094,9 +1111,19 @@ void Renderer::onImGuiRender()
         auto applyDefaults = [&](const std::string& name) {
             if (name == "model" && modelShader) {
                 modelShader->use();
-                modelShader->setUniform("irradianceMap", 9);
-                modelShader->setUniform("prefilterMap", 10);
-                modelShader->setUniform("brdfLUT", 11);
+                modelShader->setUniform("depthMap", 0);
+                for (int i = 0; i < 4; ++i)
+                {
+                    modelShader->setUniform("shadowMap[" + std::to_string(i) + "]", 1 + i);
+                }
+                modelShader->setUniform("diffuse", 5);
+                modelShader->setUniform("specular", 6);
+                modelShader->setUniform("normal", 7);
+                modelShader->setUniform("height", 8);
+                modelShader->setUniform("arm", 9);
+                modelShader->setUniform("irradianceMap", 11);
+                modelShader->setUniform("prefilterMap", 12);
+                modelShader->setUniform("brdfLUT", 13);
                 // point light constants previously set in init
                 for (int i = 0; i < static_cast<int>(scene.GetPointLights().size()); ++i) {
                     std::string base = "pointLight[" + std::to_string(i) + "]";
@@ -1130,6 +1157,11 @@ void Renderer::onImGuiRender()
                 lightPassShader->setUniform("gARM", 3);
                 lightPassShader->setUniform("gGeoNormal", 4);
                 lightPassShader->setUniform("gDepth", 5);
+                lightPassShader->setUniform("depthMap", 6);
+                for (int i = 0; i < 4; ++i)
+                {
+                    lightPassShader->setUniform("shadowMap[" + std::to_string(i) + "]", 7 + i);
+                }
                 lightPassShader->setUniform("irradianceMap", 11);
                 lightPassShader->setUniform("prefilterMap", 12);
                 lightPassShader->setUniform("brdfLUT", 13);

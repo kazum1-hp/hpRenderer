@@ -167,11 +167,15 @@ std::vector<std::shared_ptr<Texture>> Model::loadMaterialTextures(aiMaterial* ma
 		{
 			TextureType texType;
 
-			if (type == aiTextureType_DIFFUSE)                 texType = TextureType::Diffuse;
-			else if (type == aiTextureType_SPECULAR)                texType = TextureType::Specular;
-			else if (type == aiTextureType_NORMALS)                 texType = TextureType::Normal;
-			else if (type == aiTextureType_HEIGHT)                  texType = TextureType::Height;
-			else if (type == aiTextureType_GLTF_METALLIC_ROUGHNESS) texType = TextureType::ARM;
+			if (type == aiTextureType_DIFFUSE ||
+				type == aiTextureType_BASE_COLOR)                  texType = TextureType::Diffuse;
+			else if (type == aiTextureType_SPECULAR)               texType = TextureType::Specular;
+			else if (type == aiTextureType_NORMALS)                texType = TextureType::Normal;
+			else if (type == aiTextureType_HEIGHT)                 texType = TextureType::Height;
+			else if (type == aiTextureType_GLTF_METALLIC_ROUGHNESS ||
+					 type == aiTextureType_METALNESS ||
+					 type == aiTextureType_DIFFUSE_ROUGHNESS ||
+					 type == aiTextureType_AMBIENT_OCCLUSION)      texType = TextureType::ARM;
 			else continue;
 
 			loadedTextures[path] = std::make_shared<Texture>(path, texType);
