@@ -10,16 +10,15 @@ class Application
 {
 private:
 	Camera camera;
-	Window window;
-	Renderer renderer;
 	InputManager input;
 	Scene mainScene;
+	Window window;
+	Renderer renderer;
 	bool running;
 
 	void init();
 	void initImGui();
 	void shutdownImGui();
-	void shutdown();
 	void update(float deltaTime);
 
 public:

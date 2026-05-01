@@ -24,9 +24,9 @@ public:
 	std::function<void(int, int)> onFramebufferResize;
 
 private:
-	GLFWwindow* window;
+	InputManager& input;
+	GLFWwindow* window = nullptr;
 	int SCR_WIDTH;
 	int SCR_HEIGHT;
 	static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-	InputManager& input;
 };

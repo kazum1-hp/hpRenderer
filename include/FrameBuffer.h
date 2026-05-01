@@ -11,8 +11,8 @@ private:
 	GLuint FBO = 0, RBO = 0;
 	static constexpr int MAX_COLOR_ATTACHMENTS = 8;
 	GLuint texColors[MAX_COLOR_ATTACHMENTS] = {0};
-	GLuint texDepth2D, texDepthCube;
-	GLuint gDepth;
+	GLuint texDepth2D = 0, texDepthCube = 0;
+	GLuint gDepth = 0;
 	bool m_useDepth;
 	bool m_useMs;
 	bool m_useDepthMap2D;

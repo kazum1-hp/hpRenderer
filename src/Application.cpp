@@ -8,6 +8,7 @@
 Application::Application(const char* title)
 	: camera(),
 	  input(camera),
+	  mainScene(),
 	  window(title, input),
 	  renderer(camera, input, window, mainScene),
 	  running(true)
@@ -164,16 +165,10 @@ void Application::update(float deltaTime)
 	// sceneManager.update(deltaTime);
 }
 
-void Application::shutdown()
-{
-	glfwTerminate();
-}
-
 Application::~Application()
 {
 	if (running)
 	{
 		shutdownImGui();
-		shutdown();
 	}
 }

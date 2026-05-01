@@ -1,13 +1,20 @@
 #include "../include/Mesh.h"
 #include <iostream>
 
-
 Mesh::Mesh(const Geometry& geometry, const std::vector<std::shared_ptr<Texture>>& texs)
 	:textures(texs)
 {
 	const auto& vertices = geometry.vertices;
 	const auto& indices = geometry.indices;
 	this->attributes = geometry.attributes;
+
+	if (!GLAD_GL_VERSION_3_3)
+	{
+		std::cerr << "Cannot create Mesh: OpenGL 3.3 functions are unavailable." << std::endl;
+		return;
+	}
+
+	while (glGetError() != GL_NO_ERROR) {}
 
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
@@ -32,7 +39,15 @@ Mesh::Mesh(const Geometry& geometry, const std::vector<std::shared_ptr<Texture>>
 	size_t offset = 0;
 	for (const auto& attr : attributes)
 	{
-		glVertexAttribPointer(attr.index, attr.size, attr.type, attr.normalized, (GLsizei)strideInBytes, reinterpret_cast<void*>(offset));
+		if (attr.type == GL_INT)
+		{
+			glVertexAttribIPointer(attr.index, attr.size, GL_INT, (GLsizei)strideInBytes, reinterpret_cast<void*>(offset));
+		}
+		else
+		{
+			glVertexAttribPointer(attr.index, attr.size, attr.type, attr.normalized, (GLsizei)strideInBytes, reinterpret_cast<void*>(offset));
+		}
+
 		glEnableVertexAttribArray(attr.index);
 
 		GLint typeSize = (attr.type == GL_INT) ? sizeof(int) : sizeof(float);

@@ -26,10 +26,10 @@ public:
 	std::vector<std::shared_ptr<Texture>> getTexture() const { return textures; }
 
 private:
-	GLuint VAO, VBO, EBO;
+	GLuint VAO = 0, VBO = 0, EBO = 0;
 	GLuint instanceVBO = 0;
 
-	GLsizei indexCount;
+	GLsizei indexCount = 0;
 	std::vector<VertexAttribute> attributes;
 	std::vector<std::shared_ptr<Texture>> textures;
 

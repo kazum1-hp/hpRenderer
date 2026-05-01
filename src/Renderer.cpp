@@ -22,9 +22,22 @@ Renderer::Renderer(Camera& cam, InputManager& input, Window& win, Scene& scene)
      window(win),
      scene(scene)
 {
+    if (!window.getWindow()) {
+        std::cerr << "Renderer initialization skipped: no valid GLFW window." << std::endl;
+        return;
+    }
+
+    if (!glfwGetCurrentContext()) {
+        glfwMakeContextCurrent(window.getWindow());
+    }
+
+    if (!glfwGetCurrentContext()) {
+        std::cerr << "Renderer initialization skipped: no current OpenGL context." << std::endl;
+        return;
+    }
+
     framebufferWidth = window.getWidth();
     framebufferHeight = window.getHeight();
-
     framebuffers.push_back(std::make_unique<FrameBuffer>(window, /*useDepth*/true, /*useMs*/false, /*useDepthMap2D*/false, /*useDepthCube*/false, /*useHdr*/useHdr, 2));
     framebuffers.push_back(std::make_unique<FrameBuffer>(SHADOW_Size, SHADOW_Size, false, false, true, false, false));
     framebuffers.push_back(std::make_unique<FrameBuffer>(window, /*useDepth*/false, /*useMs*/false, /*useDepthMap2D*/false, /*useDepthCube*/false, /*useHdr*/true, 5, /*useGbuffer*/true));
