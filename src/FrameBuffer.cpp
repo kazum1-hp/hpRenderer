@@ -135,9 +135,9 @@ void FrameBuffer::init(unsigned int w, unsigned int h)
     }
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "ERROR :: FRAMEBUFFER :: FrameBuffer is not complete!" << std::endl;
+        std::cerr << "FBO: " << FBO << ", ERROR :: FRAMEBUFFER :: FrameBuffer is not complete!" << std::endl;
     }
-
+    std::cout << "FBO: " << FBO << ", FrameBuffer is complete!" << std::endl;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
