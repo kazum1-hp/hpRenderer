@@ -143,13 +143,19 @@ hpRenderer/
 
 ##  Controls
 
-- **Camera**: Mouse + Keyboard movement 
+### Camera
+- **Mouse + QWEASD**: Move camera
+- **Space**: Reset camera to default position
 
-- **Editor (ImGui)**:
-  - Adjust lighting parameters
-  - Modify material properties (PBR)
-  - Toggle rendering modes (Forward / Deferred)
-  - Reload shaders and assets at runtime
+### Lighting
+- **1**: Toggle Directional Light
+- **2**: Toggle Point Light
+
+### Editor (ImGui)
+- Adjust lighting parameters
+- Modify material properties (PBR)
+- Toggle rendering modes (Forward / Deferred)
+- Reload shaders and assets at runtime
         
 
 ---
