@@ -169,11 +169,17 @@ hpRenderer/
 - Designed an interactive editor for real-time rendering control
     
 - Integrated runtime asset and shader hot-reloading system
-    
+        
 
 ---
 
-##  Future Works
+## Recent Updates
+- Added new HDR tone mapping methods.
+
+
+---
+
+##  Future Work
 
 ### Rendering Pipeline Extensions
 - Screen Space Ambient Occlusion (SSAO) / Screen Space Reflections (SSR)
@@ -196,7 +202,7 @@ hpRenderer/
 ### Exploration (Long-term)
 - Hybrid rendering techniques (rasterization + ray tracing)
 - Non-photorealistic rendering (NPR)
-    
+
 
 ---
 
