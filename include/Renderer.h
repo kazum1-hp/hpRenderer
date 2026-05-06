@@ -68,8 +68,7 @@ private:
 	//unsigned int brdfLUTTexture = 0;
 
 	int effectMode = 0;
-	float skyboxLight = 1.0f;
-	float modelLight = 1.0f;
+	int toneMappingMode = 0;
 	float offset = 300.0f;
 
 	float scanPos = 0.0f;
@@ -82,7 +81,6 @@ private:
 	bool useMSAA = true;
 	bool useBlinnPhong = true;
 	bool useQuadratic = true;
-	bool useGamma = true;
 
 	const unsigned int SHADOW_Size = 1024;
 	const unsigned int resolution = 1024;
@@ -111,10 +109,11 @@ private:
 	bool drawPlane = false;
 	bool drawDebug = false;
 
-	int framebufferWidth;
-	int framebufferHeight;
+	int framebufferWidth = 0;
+	int framebufferHeight = 0;
 	unsigned int finalTexture = 0;
 	// ------------------------------------------------------------------------------
+	static void releaseEnvironmentMaps(Environment& env);
 	void prepareEnvironment(Environment& env);
 	void generateIBLMaps(Environment& env);
 
@@ -132,6 +131,7 @@ private:
 
 public:
 	Renderer(Camera& cam, InputManager& input, Window& win, Scene& scene);
+	~Renderer();
 	void init();
 	void render(Scene& scene);
 	static void InitConsole();

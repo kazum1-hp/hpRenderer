@@ -2,12 +2,13 @@
 out vec4 FragColor;
 
 in vec2 TexCoords;
+
 uniform sampler2D screenTexture;
 uniform sampler2D blur;
 uniform int effectMode;
+uniform int toneMappingMode;
 uniform float offset;
 uniform float scanPos;
-uniform bool useGamma;
 
 uniform bool useHdr;
 uniform bool useBloom;
@@ -38,6 +39,9 @@ vec2 offsets[9] = vec2[](
     vec2( 0.0f, -1.0 / offset), // bottom
     vec2( 1.0 / offset, -1.0 / offset)  // right bottom
 );
+
+vec3 ACESFilm(vec3 x);
+vec3 Uncharted2Tonemap(vec3 x);
 
 void main()
 {
@@ -82,18 +86,35 @@ void main()
             if (useBloom)
                 bloomColor = texture(blur, TexCoords).rgb;
                 color += bloomColor;
+
+            color *= exposure;
+
             // reinhard
-            // result = color / (color + vec3(1.0));
-            // exposure
-            result = vec3(1.0) - exp(-color * exposure);
+            if (toneMappingMode == 0)    
+                result = color / (color + vec3(1.0));
+
+            // simple exposure
+            else if (toneMappingMode == 1)   
+                result = vec3(1.0) - exp(-color);
+                
+            // ACESFilm
+            else if (toneMappingMode == 2)
+                result = ACESFilm(color * 0.5);
+
+            // Hable
+            else if (toneMappingMode == 3)    
+            {
+                result = Uncharted2Tonemap(color);
+
+                float W = 11.2;
+                vec3 whiteScale = 1.0 / Uncharted2Tonemap(vec3(W));
+                result *= whiteScale;
+            }
         }
         else
             result = color;
 
-        if (useGamma)
-            FragColor = vec4(pow(result, vec3(1.0 / gamma)), 1.0);
-        else
-            FragColor = vec4(result, 1.0);
+        FragColor = vec4(pow(result, vec3(1.0 / gamma)), 1.0);
     }
         
     else
@@ -101,4 +122,27 @@ void main()
             color = vec3(texture(screenTexture, TexCoords).rgb);
             FragColor = vec4(pow(color, vec3(1.0 / gamma)), 1.0);
         }
+}
+
+vec3 ACESFilm(vec3 x)
+{
+    float a = 2.51;
+    float b = 0.03;
+    float c = 2.43;
+    float d = 0.59;
+    float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+vec3 Uncharted2Tonemap(vec3 x)
+{
+    float A = 0.15;
+    float B = 0.50;
+    float C = 0.10;
+    float D = 0.20;
+    float E = 0.02;
+    float F = 0.30;
+
+    return ((x*(A*x + C*B) + D*E) / 
+            (x*(A*x + B) + D*F)) - E/F;
 }

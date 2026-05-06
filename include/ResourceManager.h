@@ -71,9 +71,18 @@ public:
 
     // --- Texture ---
     std::shared_ptr<Texture> LoadTexture(const std::string& path, TextureType type = Diffuse) {
-        if (textures.find(path) != textures.end()) return textures[path];
+        auto it = textures.find(path);
+        if (it != textures.end()) {
+            if (it->second && it->second->isValid()) return it->second;
+            textures.erase(it);
+        }
 
         auto tex = std::make_shared<Texture>(path.c_str(), type);
+        if (!tex->isValid()) {
+            std::cerr << "LoadTexture failed, not caching: " << path << std::endl;
+            return nullptr;
+        }
+
         textures[path] = tex;
         return tex;
     }
@@ -81,6 +90,11 @@ public:
     // Replace/reload texture (returns a new shared_ptr)
     std::shared_ptr<Texture> ReloadTexture(const std::string& path, TextureType type = Diffuse) {
         auto tex = std::make_shared<Texture>(path, type);
+        if (!tex->isValid()) {
+            std::cerr << "ReloadTexture failed, keeping previous texture: " << path << std::endl;
+            return nullptr;
+        }
+
         textures[path] = tex;
         return tex;
     }

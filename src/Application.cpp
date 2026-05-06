@@ -58,7 +58,7 @@ void Application::init()
 	auto environmentMap = res.LoadTexture("../assets/hdr/newman_cafeteria_4k.hdr", HDR);
 
 	auto envAsset = std::make_shared<EnvironmentAsset>();
-	envAsset->hdrTexture = environmentMap->getID();
+	envAsset->hdrTexture = environmentMap ? environmentMap->getID() : 0;
 
 	mainScene.AddObject(model, glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(0.3f), material);
 	mainScene.AddPointLight(Light(glm::vec3(2.0f, 2.0f, 2.0f), 1.0f, glm::vec3(0.0f, 0.5f, 1.5f), LightType::Point));

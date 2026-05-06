@@ -16,6 +16,15 @@ static inline void SafeCopyPath(char* dest, size_t destSize, const std::string& 
     dest[destSize - 1] = '\0';
 }
 
+static inline void DeleteTextureIfNeeded(GLuint& texture)
+{
+    if (texture != 0)
+    {
+        glDeleteTextures(1, &texture);
+        texture = 0;
+    }
+}
+
 Renderer::Renderer(Camera& cam, InputManager& input, Window& win, Scene& scene)
     :camera(cam),
      input(input),
@@ -59,6 +68,14 @@ Renderer::Renderer(Camera& cam, InputManager& input, Window& win, Scene& scene)
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_CULL_FACE);
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+}
+
+Renderer::~Renderer()
+{
+    if (glfwGetCurrentContext())
+    {
+        releaseEnvironmentMaps(scene.GetEnvironment());
+    }
 }
 
 void Renderer::init()
@@ -164,14 +181,25 @@ void Renderer::init()
     }
 }
 
+void Renderer::releaseEnvironmentMaps(Environment& env)
+{
+    DeleteTextureIfNeeded(env.maps.envCubemap);
+    DeleteTextureIfNeeded(env.maps.irradianceMap);
+    DeleteTextureIfNeeded(env.maps.prefilterMap);
+    DeleteTextureIfNeeded(env.maps.brdfLUT);
+    env.maps.isGenerated = false;
+    env.maps.lastHDR = 0;
+}
+
 void Renderer::prepareEnvironment(Environment& env)
 {
-    if (!env.asset) return;
+    if (!env.asset || env.asset->hdrTexture == 0) return;
 
     if (env.maps.isGenerated &&
         env.maps.lastHDR == env.asset->hdrTexture)
         return;
 
+    releaseEnvironmentMaps(env);
     generateIBLMaps(env);
 
     env.maps.lastHDR = env.asset->hdrTexture;
@@ -184,8 +212,10 @@ void Renderer::generateIBLMaps(Environment& env)
 
     GLuint envMap = env.asset->hdrTexture;
 
+    const unsigned int maxMipLevels = 5;
     unsigned int captureFBO;
     unsigned int captureRBO;
+    GLboolean wasCullFaceEnabled = glIsEnabled(GL_CULL_FACE);
     glGenFramebuffers(1, &captureFBO);
     glGenRenderbuffers(1, &captureRBO);
 
@@ -225,6 +255,10 @@ void Renderer::generateIBLMaps(Environment& env)
         cube->draw();
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    glBindTexture(GL_TEXTURE_CUBE_MAP, env.maps.envCubemap);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
 
     // pbr: create an irradiance cubemap, and re-scale capture FBO to irradiance scale.
     // --------------------------------------------------------------------------------
@@ -276,6 +310,8 @@ void Renderer::generateIBLMaps(Environment& env)
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); // be sure to set minification filter to mip_linear 
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, maxMipLevels - 1);
     // generate mipmaps for the cubemap so OpenGL automatically allocates the required memory.
     glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
 
@@ -283,11 +319,11 @@ void Renderer::generateIBLMaps(Environment& env)
     // ----------------------------------------------------------------------------------------------------
     prefilterShader->use();
     prefilterShader->setUniform("environmentMap", 0);
+    prefilterShader->setUniform("environmentResolution", static_cast<float>(resolution));
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, env.maps.envCubemap);
 
     glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
-    unsigned int maxMipLevels = 5;
     for (unsigned int mip = 0; mip < maxMipLevels; ++mip)
     {
         // reisze framebuffer according to mip-level size.
@@ -335,6 +371,17 @@ void Renderer::generateIBLMaps(Environment& env)
     screenQuad->draw();
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDeleteRenderbuffers(1, &captureRBO);
+    glDeleteFramebuffers(1, &captureFBO);
+
+    if (wasCullFaceEnabled)
+        glEnable(GL_CULL_FACE);
+    else
+        glDisable(GL_CULL_FACE);
 
     glViewport(0, 0, framebufferWidth, framebufferHeight);
 }
@@ -559,7 +606,7 @@ void Renderer::forwardPass(Scene& scene)
         {
             glm::mat4 lightModel(1.0f);
             lightModel = glm::translate(model, scene.GetPointLights()[i].getLightPos());
-            lightModel = glm::scale(lightModel, glm::vec3(0.25f));
+            lightModel = glm::scale(lightModel, glm::vec3(0.1f));
             lightShader->setUniform("model", lightModel);
             lightShader->setUniform("lightColor", scene.GetPointLights()[i].getColor());
             lightShader->setUniform("enabled", scene.GetPointLights()[i].lightOn() && input.isPointLightOn());
@@ -621,11 +668,11 @@ void Renderer::postProcessPass(const FrameBuffer& framebuffer)
     sceneFramebufferShader->use();
 
     sceneFramebufferShader->setUniform("effectMode", effectMode);
+    sceneFramebufferShader->setUniform("toneMappingMode", toneMappingMode);
     sceneFramebufferShader->setUniform("offset", offset);
     sceneFramebufferShader->setUniform("screenTexture", 0);
     sceneFramebufferShader->setUniform("blur", 1);
     sceneFramebufferShader->setUniform("scanPos", scanPos);
-    sceneFramebufferShader->setUniform("useGamma", useGamma);
     sceneFramebufferShader->setUniform("useHdr", useHdr);
     sceneFramebufferShader->setUniform("useBloom", useBloom);
     sceneFramebufferShader->setUniform("exposure", exposure);
@@ -824,7 +871,7 @@ void Renderer::lightPass(Scene& scene)
         {
             glm::mat4 lightModel(1.0f);
             lightModel = glm::translate(model, scene.GetPointLights()[i].getLightPos());
-            lightModel = glm::scale(lightModel, glm::vec3(0.25f));
+            lightModel = glm::scale(lightModel, glm::vec3(0.1f));
             lightShader->setUniform("model", lightModel);
             lightShader->setUniform("lightColor", scene.GetPointLights()[i].getColor());
             lightShader->setUniform("enabled", scene.GetPointLights()[i].lightOn() && input.isPointLightOn());
@@ -1056,7 +1103,10 @@ void Renderer::onImGuiRender()
     {
         ImGui::Checkbox("useHdr", &useHdr);
         if (useHdr)
+        {
+            ImGui::Combo("ToneMapping Mode", &toneMappingMode, "reinhard\0simple exposure\0ACESFilm\0Hable\0\0");
             ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.0f);
+        }
 
         if (drawLights)
         {
@@ -1132,15 +1182,14 @@ void Renderer::onImGuiRender()
                     modelShader->setUniform(base + ".quadratic", 0.032f);
                 }
             }
-            else if (name == "scene framebuffer" && sceneFramebufferShader) {
+            /*else if (name == "scene framebuffer" && sceneFramebufferShader) {
                 sceneFramebufferShader->use();
                 sceneFramebufferShader->setUniform("screenTexture", 0);
                 sceneFramebufferShader->setUniform("blur", 1);
-                sceneFramebufferShader->setUniform("useGamma", useGamma);
                 sceneFramebufferShader->setUniform("useHdr", useHdr);
                 sceneFramebufferShader->setUniform("useBloom", useBloom);
                 sceneFramebufferShader->setUniform("exposure", exposure);
-            }
+            }*/
             else if (name == "bloomBlur" && bloomBlurShader) {
                 bloomBlurShader->use();
                 bloomBlurShader->setUniform("image", 0);

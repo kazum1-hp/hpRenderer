@@ -71,6 +71,11 @@ source_group("Shaders" FILES ${SHADER_FILES})
 
 # shader
 file(COPY shaders DESTINATION ${CMAKE_BINARY_DIR})
+add_custom_command(TARGET hpRenderer POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/shaders
+            ${CMAKE_BINARY_DIR}/shaders
+)
 
 # assets
 file(COPY assets DESTINATION ${CMAKE_BINARY_DIR})

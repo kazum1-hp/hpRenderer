@@ -72,10 +72,11 @@ Texture::Texture(const std::string& path, TextureType typeName)
 		return;
 	}
 
-	GLenum internalformat, format, type;
+	GLenum internalformat, format, dataType;
 	// Number of Width, height and Color channels
 	int  width, height, nrChannels;
 	void* data = nullptr;
+	bool uploaded = false;
 
 	// load from memory
 	if (typeName == HDR) {
@@ -92,33 +93,48 @@ Texture::Texture(const std::string& path, TextureType typeName)
 	{
 		if (nrChannels == 3)
 		{
-			if (typeName == Diffuse) { internalformat = GL_SRGB; type = GL_UNSIGNED_BYTE; }
-			else if (typeName == HDR) { internalformat = GL_RGB16F; type = GL_FLOAT; }
-			else { internalformat = GL_RGB; type = GL_UNSIGNED_BYTE; }
+			if (typeName == Diffuse) { internalformat = GL_SRGB; dataType = GL_UNSIGNED_BYTE; }
+			else if (typeName == HDR) { internalformat = GL_RGB16F; dataType = GL_FLOAT; }
+			else { internalformat = GL_RGB; dataType = GL_UNSIGNED_BYTE; }
 			format = GL_RGB;
 
-			glTexImage2D(GL_TEXTURE_2D, 0, internalformat, width, height, 0, format, type, data);
+			glTexImage2D(GL_TEXTURE_2D, 0, internalformat, width, height, 0, format, dataType, data);
+			uploaded = true;
 		}
 
 		else if (nrChannels == 4)
 		{
-			if (typeName == Diffuse) { internalformat = GL_SRGB_ALPHA; type = GL_UNSIGNED_BYTE; }
-			else if (typeName == HDR) { internalformat = GL_RGBA16F; type = GL_FLOAT; }
-			else { internalformat = GL_RGBA; type = GL_UNSIGNED_BYTE; }
+			if (typeName == Diffuse) { internalformat = GL_SRGB_ALPHA; dataType = GL_UNSIGNED_BYTE; }
+			else if (typeName == HDR) { internalformat = GL_RGBA16F; dataType = GL_FLOAT; }
+			else { internalformat = GL_RGBA; dataType = GL_UNSIGNED_BYTE; }
 			format = GL_RGBA;
 
-			glTexImage2D(GL_TEXTURE_2D, 0, internalformat, width, height, 0, format, type, data);
+			glTexImage2D(GL_TEXTURE_2D, 0, internalformat, width, height, 0, format, dataType, data);
+			uploaded = true;
 		}
 
-		glGenerateMipmap(GL_TEXTURE_2D);
+		if (uploaded)
+		{
+			glGenerateMipmap(GL_TEXTURE_2D);
+			valid = true;
 
-		std::cout << "Loading texture: " << path << " ID: " << ID << " texType: " << typeName << std::endl;
-		//std::cout << "Size: " << width << "x" << height << ", Channels: " << nrChannels << std::endl;
+			std::cout << "Loading texture: " << path << " ID: " << ID << " texType: " << typeName << std::endl;
+			//std::cout << "Size: " << width << "x" << height << ", Channels: " << nrChannels << std::endl;
+		}
+		else
+		{
+			std::cerr << "Unsupported texture channel count (" << nrChannels << "): " << path << std::endl;
+		}
 	}
 
 	else
 	{
-		std::cerr << "Failed to load texture" << std::endl;
+		std::cerr << "Failed to load texture: " << path;
+		if (stbi_failure_reason())
+		{
+			std::cerr << " (" << stbi_failure_reason() << ")";
+		}
+		std::cerr << std::endl;
 	}
 
 	stbi_image_free(data);
@@ -132,5 +148,8 @@ void Texture::bind(GLuint slot) const
 
 Texture::~Texture()
 {
-	glDeleteTextures(1, &ID);
+	if (ID != 0)
+	{
+		glDeleteTextures(1, &ID);
+	}
 }
