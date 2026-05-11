@@ -175,11 +175,11 @@ public:
         if (plane) return plane;
  
         std::vector<float> planeVertices = {
-            // positions            // normals         // texcoords
-             25.0f, -1.0f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
-            -25.0f, -1.0f,  25.0f,  0.0f, 1.0f, 0.0f,   0.0f,  0.0f,
-            -25.0f, -1.0f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
-             25.0f, -1.0f, -25.0f,  0.0f, 1.0f, 0.0f,  25.0f, 25.0f
+                // pos             // normal         // uv       // tangent       // bitangent
+             25, -1,  25,           0, 1, 0,         25,  0,      1, 0, 0,          0, 0, -1,
+            -25, -1,  25,           0, 1, 0,          0,  0,      1, 0, 0,          0, 0, -1,
+            -25, -1, -25,           0, 1, 0,          0, 25,      1, 0, 0,          0, 0, -1,
+             25, -1, -25,           0, 1, 0,         25, 25,      1, 0, 0,          0, 0, -1
         };
 
         std::vector<unsigned int> p_indices = {
@@ -190,12 +190,16 @@ public:
         std::vector<VertexAttribute> f_attributes = {
             { 0, 3, GL_FLOAT, GL_FALSE },
             { 1, 3, GL_FLOAT, GL_FALSE },
-            { 2, 2, GL_FLOAT, GL_FALSE }
+            { 2, 2, GL_FLOAT, GL_FALSE },
+            { 3, 3, GL_FLOAT, GL_FALSE },
+            { 4, 3, GL_FLOAT, GL_FALSE }
         };
 
         std::shared_ptr<Geometry> planeGeo = std::make_shared<Geometry>(planeVertices, p_indices, f_attributes);
-        std::shared_ptr<Texture> planeTex = std::make_shared <Texture>("../assets/textures/wood.png");
-        std::vector<std::shared_ptr<Texture>> texs = { planeTex };
+        std::shared_ptr<Texture> planeTex = std::make_shared <Texture>("../assets/textures/bricks2/bricks2.jpg");
+        std::shared_ptr<Texture> planeNormalTex = std::make_shared <Texture>("../assets/textures/bricks2/bricks2_normal.jpg", Normal);
+        std::shared_ptr<Texture> planeHeightTex = std::make_shared <Texture>("../assets/textures/bricks2/bricks2_disp.jpg", Height);
+        std::vector<std::shared_ptr<Texture>> texs = { planeTex, planeNormalTex, planeHeightTex };
         plane = std::make_shared<Mesh>(*planeGeo, texs);
         return plane;
     }

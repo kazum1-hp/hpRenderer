@@ -504,6 +504,7 @@ void Renderer::forwardPass(Scene& scene)
     // object
     modelShader->use();
 
+    modelShader->setUniform("time", static_cast<float>(glfwGetTime()));
     modelShader->setUniform("usePost", usePostProcess);
 
     modelShader->setUniform("aoBias", aoBias);
@@ -568,8 +569,9 @@ void Renderer::forwardPass(Scene& scene)
     {
         drawMesh(*plane, *modelShader);
         modelShader->setUniform("model", model);
-        modelShader->setUniform("hasNormalMap", false);
-        modelShader->setUniform("hasHeightMap", false);
+        modelShader->setUniform("hasNormalMap", hasNormal);
+        modelShader->setUniform("hasHeightMap", hasHeight);
+        modelShader->setUniform("height_scale", height_scale);
         modelShader->setUniform("hasARMMap", false);
         glDisable(GL_CULL_FACE);
         plane->draw();
@@ -587,8 +589,8 @@ void Renderer::forwardPass(Scene& scene)
     for (const auto& obj : scene.GetObjects()) {
         drawModel(*obj.model, *modelShader);
         modelShader->setUniform("hasNormalMap", hasNormal);
-        modelShader->setUniform("hasHeightMap", hasHeight);
-        modelShader->setUniform("height_scale", height_scale);
+        modelShader->setUniform("hasHeightMap", false);
+        modelShader->setUniform("height_scale", false);
         modelShader->setUniform("hasARMMap", true);
         renderModel(obj.transform, *obj.model, *modelShader);
     }
@@ -719,18 +721,11 @@ void Renderer::geometryPass(Scene& scene)
     gBufferShader->setUniform("roughnessBias", roughnessBias);
     gBufferShader->setUniform("metallicBias", metallicBias);
 
-    // Per-mesh flags handled in drawModel/drawMesh, but set global toggles here
-    gBufferShader->setUniform("hasNormalMap", hasNormal);
-    gBufferShader->setUniform("hasHeightMap", hasHeight);
-    gBufferShader->setUniform("hasARMMap", true); // assume models may provide ARM map; drawMesh will bind when present
-    gBufferShader->setUniform("height_scale", height_scale);
-
     if (drawPlane)
     {
         drawMesh(*plane, *gBufferShader);
         gBufferShader->setUniform("model", model);
-        gBufferShader->setUniform("hasNormalMap", false);
-        gBufferShader->setUniform("hasHeightMap", false);
+        gBufferShader->setUniform("hasNormalMap", hasNormal);
         gBufferShader->setUniform("hasARMMap", false);
         glDisable(GL_CULL_FACE);
         plane->draw();
@@ -740,8 +735,6 @@ void Renderer::geometryPass(Scene& scene)
     for (const auto& obj : scene.GetObjects()) {
         drawModel(*obj.model, *gBufferShader);
         gBufferShader->setUniform("hasNormalMap", hasNormal);
-        gBufferShader->setUniform("hasHeightMap", hasHeight);
-        gBufferShader->setUniform("height_scale", height_scale);
         gBufferShader->setUniform("hasARMMap", true);
         renderModel(obj.transform, *obj.model, *gBufferShader);
     }
@@ -1133,6 +1126,12 @@ void Renderer::onImGuiRender()
     ImGui::SliderFloat("metallicBias", &metallicBias, -1.0f, 1.0f);
     input.onImGuiRender();
 
+    ImGui::Checkbox("useHeight", &hasHeight);
+    if (hasHeight)
+    {
+        ImGui::SliderFloat("height_scale", &height_scale, 0.0001f, 0.01f);
+    }
+
     ImGui::Checkbox("useNormal", &hasNormal);
     ImGui::SameLine();
     ImGui::Checkbox("useShadow", &useShadows);
@@ -1182,14 +1181,6 @@ void Renderer::onImGuiRender()
                     modelShader->setUniform(base + ".quadratic", 0.032f);
                 }
             }
-            /*else if (name == "scene framebuffer" && sceneFramebufferShader) {
-                sceneFramebufferShader->use();
-                sceneFramebufferShader->setUniform("screenTexture", 0);
-                sceneFramebufferShader->setUniform("blur", 1);
-                sceneFramebufferShader->setUniform("useHdr", useHdr);
-                sceneFramebufferShader->setUniform("useBloom", useBloom);
-                sceneFramebufferShader->setUniform("exposure", exposure);
-            }*/
             else if (name == "bloomBlur" && bloomBlurShader) {
                 bloomBlurShader->use();
                 bloomBlurShader->setUniform("image", 0);
@@ -1253,10 +1244,10 @@ void Renderer::onImGuiRender()
     if (ImGui::Button("Browse Model...")) {
         // Prepare a FileDialogConfig and set the path
         IGFD::FileDialogConfig cfg;
-        cfg.path = "../assets"; // starting directory (can be changed)
+        cfg.path = "../assets/models"; // starting directory (can be changed)
 
         // Open file dialog
-        ImGuiFileDialog::Instance()->OpenDialog("ChooseModelDlg", "Choose Model", ".gltf,.glb", cfg);
+        ImGuiFileDialog::Instance()->OpenDialog("ChooseModelDlg", "Choose Model", ".gltf", cfg);
     }
 
     ImGui::SetNextWindowDockID(left_bottom_id, ImGuiCond_FirstUseEver);
@@ -1298,7 +1289,7 @@ void Renderer::onImGuiRender()
     //ImGui::SameLine();
     if (ImGui::Button("Browse HDR...")) {
         IGFD::FileDialogConfig cfg2;
-        cfg2.path = "../assets";
+        cfg2.path = "../assets/hdr";
         ImGuiFileDialog::Instance()->OpenDialog("ChooseHdrDlg", "Choose HDR", ".hdr", cfg2);
     }
 

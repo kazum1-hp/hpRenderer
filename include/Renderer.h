@@ -69,7 +69,7 @@ private:
 
 	int effectMode = 0;
 	int toneMappingMode = 0;
-	float offset = 300.0f;
+	float offset = 500.0f;
 
 	float scanPos = 0.0f;
 

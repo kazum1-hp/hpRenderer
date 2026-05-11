@@ -63,6 +63,7 @@ uniform bool hasARMMap;
 uniform vec3 viewPos;
 uniform bool useQuadratic;
 uniform bool usePost;
+uniform float time;
 
 uniform float far_plane;
 uniform bool parallelShadows;
@@ -99,7 +100,9 @@ void main()
 	vec3 N = normalize(fs_in.Normal);
 	vec3 T = normalize(fs_in.Tangent);
 	T = normalize(T - dot(T, N) * N);
-	vec3 B = cross(T, N);
+	vec3 B = normalize(fs_in.Bitangent);
+    B = normalize(B - dot(B,N)*N);
+    B = normalize(B - dot(B,T)*T);
 	mat3 TBN = mat3(T, B, N);
 
 	vec3 norm = N;
@@ -111,9 +114,9 @@ void main()
 		viewDir = normalize(transpose(TBN) * viewDir);
 		texCoords = ParallaxMapping(fs_in.TexCoords, viewDir);
 	
-		 // discards a fragment when sampling outside default texture region (fixes border artifacts)
-		if(texCoords.x > 1.0 || texCoords.y > 1.0 || texCoords.x < 0.0 || texCoords.y < 0.0)
-			discard;
+		// discards a fragment when sampling outside default texture region (fixes border artifacts)
+		// if(texCoords.x > 1.0 || texCoords.y > 1.0 || texCoords.x < 0.0 || texCoords.y < 0.0)
+			// discard;
 	}
 
 	if (hasNormalMap)
