@@ -678,6 +678,9 @@ void Renderer::postProcessPass(const FrameBuffer& framebuffer)
     sceneFramebufferShader->setUniform("useHdr", useHdr);
     sceneFramebufferShader->setUniform("useBloom", useBloom);
     sceneFramebufferShader->setUniform("exposure", exposure);
+    sceneFramebufferShader->setUniform("time", static_cast<float>(glfwGetTime()));
+    sceneFramebufferShader->setUniform("viewportWidth", static_cast<float>(framebufferWidth));
+
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, framebuffer.getColor(0));
 

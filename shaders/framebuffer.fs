@@ -13,6 +13,8 @@ uniform float scanPos;
 uniform bool useHdr;
 uniform bool useBloom;
 uniform float exposure;
+uniform float time;
+uniform float viewportWidth;
 
 float gamma = 2.2;
 
@@ -53,7 +55,8 @@ void main()
             sampleTex[i] = texture(screenTexture, TexCoords.st + offsets[i]).rgb;
         }
 
- if (gl_FragCoord.x > scanPos)
+    // float scanPos = viewportWidth * (0.5 * sin(0.3 * time) + 0.5);
+    if (gl_FragCoord.x > scanPos)
     {
         if (effectMode == 0) { color = texture(screenTexture, TexCoords).rgb; }
 
@@ -96,7 +99,7 @@ void main()
             // simple exposure
             else if (toneMappingMode == 1)   
                 result = vec3(1.0) - exp(-color);
-                
+            
             // ACESFilm
             else if (toneMappingMode == 2)
                 result = ACESFilm(color * 0.5);
@@ -116,12 +119,12 @@ void main()
 
         FragColor = vec4(pow(result, vec3(1.0 / gamma)), 1.0);
     }
-        
-    else
-        {
-            color = vec3(texture(screenTexture, TexCoords).rgb);
-            FragColor = vec4(pow(color, vec3(1.0 / gamma)), 1.0);
-        }
+       
+   else
+   {
+       color = vec3(texture(screenTexture, TexCoords).rgb);
+       FragColor = vec4(pow(color, vec3(1.0 / gamma)), 1.0);
+   }
 }
 
 vec3 ACESFilm(vec3 x)
