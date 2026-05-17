@@ -422,6 +422,7 @@ void Renderer::render(Scene& scene)
     else
     {
         deferredPass(scene);
+        usePostProcess = true;
         postProcessPass(lightPassFrameBuffer);
         finalTexture = postProcessFrameBuffer.getColor();
     }

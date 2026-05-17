@@ -34,6 +34,17 @@ Developed from scratch, it implements physically-based rendering (PBR), image-ba
 <p align="left">
   <img src="./docs/exposure_en.png" width="90%"/>
 </p>
+
+---
+
+## Rendering Pipeline
+
+The renderer follows a modular multi-pass rendering pipeline designed for real-time graphics experimentation and future engine expansion.
+
+<p align="left">
+  <img src="./docs/renderer_pipeline_en.png" width="90%"/>
+</p>
+
 ---
 
 ##  Features
