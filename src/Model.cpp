@@ -1,4 +1,5 @@
 #include "../include/Model.h"
+#include "../include/ResourceManager.h"
 #include <iostream>
 #include <filesystem>
 
@@ -33,18 +34,25 @@ void Model::enableInstancing(const std::vector<glm::mat4>& instanceTransforms)
 }
 
 // New: Safely reload the model on the current instance
-void Model::reload(const std::string& path)
+bool Model::reload(const std::string& path)
 {
-    // Clean up previous data (unique_ptr will delete GPU resources during destruction).
-    meshes.clear();
-    loadedTextures.clear();
-    directory.clear();
+    Model reloaded(path);
+    if (reloaded.meshes.empty())
+    {
+        std::cerr << "Model reload failed, keeping previous model: " << path << std::endl;
+        return false;
+    }
 
-    // Reload
-    loadModel(path);
+    meshes = std::move(reloaded.meshes);
+    directory = std::move(reloaded.directory);
+    loadedTextures = std::move(reloaded.loadedTextures);
+    this->path = std::move(reloaded.path);
+    instanceCount = reloaded.instanceCount;
+    instancingEnabled = reloaded.instancingEnabled;
+    return true;
 }
 
-void Model::loadModel(const std::string& path)
+bool Model::loadModel(const std::string& path)
 {
 	Assimp::Importer importer;
 	const aiScene* scene = importer.ReadFile(path,
@@ -54,8 +62,10 @@ void Model::loadModel(const std::string& path)
 
 	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
 		std::cerr << "ERROR::ASSIMP:: " << importer.GetErrorString() << std::endl;
-		return;
+		return false;
 	}
+
+	this->path = path;
 
 	// Use std::filesystem to get the parent directory, compatible with different path styles.
 	std::filesystem::path p(path);
@@ -65,6 +75,8 @@ void Model::loadModel(const std::string& path)
 	{
 		meshes.push_back(processMesh(scene->mMeshes[i], scene));
 	}
+
+	return !meshes.empty();
 }
 
 std::unique_ptr<Mesh> Model::processMesh(aiMesh* mesh, const aiScene* scene)
@@ -159,6 +171,21 @@ std::vector<std::shared_ptr<Texture>> Model::loadMaterialTextures(aiMaterial* ma
 
 		// Use filesystem concatenation to avoid errors from manual concatenation.
 		std::filesystem::path texpath = std::filesystem::path(directory) / std::filesystem::path(str.C_Str());
+		if (!std::filesystem::exists(texpath))
+		{
+			std::string filename = texpath.filename().string();
+			const std::string roughToken = "_rough_";
+			const size_t roughPos = filename.find(roughToken);
+			if (roughPos != std::string::npos)
+			{
+				filename.replace(roughPos, roughToken.size(), "_arm_");
+				std::filesystem::path fallbackPath = texpath.parent_path() / filename;
+				if (std::filesystem::exists(fallbackPath))
+				{
+					texpath = fallbackPath;
+				}
+			}
+		}
 		std::string path = texpath.string();
 
 		std::cout << "[Assimp] Found texture: " << path << " | Type: " << typeName << std::endl;
@@ -178,7 +205,13 @@ std::vector<std::shared_ptr<Texture>> Model::loadMaterialTextures(aiMaterial* ma
 					 type == aiTextureType_AMBIENT_OCCLUSION)      texType = TextureType::ARM;
 			else continue;
 
-			loadedTextures[path] = std::make_shared<Texture>(path, texType);
+			auto texture = ResourceManager::GetInstance().LoadTexture(path, texType);
+			if (!texture || !texture->isValid())
+			{
+				std::cerr << "Skipping invalid model texture: " << path << std::endl;
+				continue;
+			}
+			loadedTextures[path] = texture;
 		}
 
 		textures.push_back(loadedTextures[path]);

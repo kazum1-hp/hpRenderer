@@ -54,13 +54,19 @@ void Application::init()
 	res.LoadShader("brdf", "../shaders/brdf.vs", "../shaders/brdf.fs");
 
 	auto model = res.LoadModel("../assets/models/blue_metal_plate_4k.gltf/blue_metal_plate_4k.gltf");
+	auto model2 = res.LoadModel("../assets/models/metal_office_desk_4k/metal_office_desk_4k.gltf");
+	auto model3 = res.LoadModel("../assets/models/marble_bust_01_4k/marble_bust_01_4k.gltf");
+
 	auto material = res.LoadMaterial("material");
 	auto environmentMap = res.LoadTexture("../assets/hdr/newman_cafeteria_4k.hdr", HDR);
 
 	auto envAsset = std::make_shared<EnvironmentAsset>();
 	envAsset->hdrTexture = environmentMap ? environmentMap->getID() : 0;
 
-	mainScene.AddObject(model, glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(0.3f), material);
+	mainScene.AddObject(model, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f), material);
+	mainScene.AddObject(model2, glm::vec3(0.0f, -5.5f, 0.0f), glm::vec3(5.0f), material);
+	mainScene.AddObject(model3, glm::vec3(-3.0f, -1.5f, 0.0f), glm::vec3(5.0f), material);
+
 	mainScene.AddPointLight(Light(glm::vec3(2.0f, 2.0f, 2.0f), 1.0f, glm::vec3(0.0f, 0.5f, 1.5f), LightType::Point));
 	mainScene.AddPointLight(Light(glm::vec3(2.0f, 2.0f, 2.0f), 1.0f, glm::vec3(-4.0f, 0.5f, -3.0f), LightType::Point));
 	mainScene.AddPointLight(Light(glm::vec3(2.0f, 2.0f, 2.0f), 1.0f, glm::vec3(3.0f, 0.5f, 1.0f), LightType::Point));

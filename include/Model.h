@@ -26,13 +26,15 @@ public:
 
 	void enableInstancing(const std::vector<glm::mat4>& instanceTransforms);
 
-	void reload(const std::string& path);
+	bool reload(const std::string& path);
+	const std::string& getPath() const { return path; }
 
 private:
-	void loadModel(const std::string& path);
+	bool loadModel(const std::string& path);
 	std::unique_ptr<Mesh> processMesh(aiMesh* mesh, const aiScene* scene);
 	std::vector<std::shared_ptr<Texture>> loadMaterialTextures(aiMaterial* mat, aiTextureType type, const std::string& typeName);
 
+	std::string path;
 	std::map<std::string, std::shared_ptr<Texture>> loadedTextures;
 };
 

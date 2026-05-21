@@ -16,6 +16,12 @@ static inline void SafeCopyPath(char* dest, size_t destSize, const std::string& 
     dest[destSize - 1] = '\0';
 }
 
+static inline std::string FileNameFromPath(const std::string& path)
+{
+    const size_t pos = path.find_last_of("/\\");
+    return pos == std::string::npos ? path : path.substr(pos + 1);
+}
+
 static inline void DeleteTextureIfNeeded(GLuint& texture)
 {
     if (texture != 0)
@@ -110,6 +116,18 @@ void Renderer::init()
     screenQuad = res.GetScreenQuad();
     plane = res.GetPlane();
     cube = res.GetCube();
+
+    bool normal = false;
+    // plane normal
+    hasNormal.push_back(normal);
+    for (int i = 0; i < scene.GetObjects().size(); i++)
+    {
+        float bias = 0.0f;
+        aoBias.push_back(bias);
+        roughnessBias.push_back(bias);
+        metallicBias.push_back(bias);
+        hasNormal.push_back(normal);
+    }
 
     for (int i = 0; i < scene.GetPointLights().size(); i++)
     {
@@ -508,10 +526,6 @@ void Renderer::forwardPass(Scene& scene)
     modelShader->setUniform("time", static_cast<float>(glfwGetTime()));
     modelShader->setUniform("usePost", usePostProcess);
 
-    modelShader->setUniform("aoBias", aoBias);
-    modelShader->setUniform("roughnessBias", roughnessBias);
-    modelShader->setUniform("metallicBias", metallicBias);
-
     // transform matrix
     modelShader->setUniform("view", camera.getViewMatrix());
     modelShader->setUniform("projection", camera.getProjectionMatrix());
@@ -570,7 +584,7 @@ void Renderer::forwardPass(Scene& scene)
     {
         drawMesh(*plane, *modelShader);
         modelShader->setUniform("model", model);
-        modelShader->setUniform("hasNormalMap", hasNormal);
+        modelShader->setUniform("hasNormalMap", static_cast<bool>(hasNormal[0]));
         modelShader->setUniform("hasHeightMap", hasHeight);
         modelShader->setUniform("height_scale", height_scale);
         modelShader->setUniform("hasARMMap", false);
@@ -587,9 +601,14 @@ void Renderer::forwardPass(Scene& scene)
     glActiveTexture(GL_TEXTURE13);
     glBindTexture(GL_TEXTURE_2D, env.maps.brdfLUT);
 
+    unsigned int index = 0;
     for (const auto& obj : scene.GetObjects()) {
         drawModel(*obj.model, *modelShader);
-        modelShader->setUniform("hasNormalMap", hasNormal);
+        modelShader->setUniform("aoBias", aoBias[index]);
+        modelShader->setUniform("roughnessBias", roughnessBias[index]);
+        modelShader->setUniform("metallicBias", metallicBias[index]);
+        index++;
+        modelShader->setUniform("hasNormalMap", static_cast<bool>(hasNormal[index]));
         modelShader->setUniform("hasHeightMap", false);
         modelShader->setUniform("height_scale", false);
         modelShader->setUniform("hasARMMap", true);
@@ -721,24 +740,27 @@ void Renderer::geometryPass(Scene& scene)
     gBufferShader->setUniform("viewPos", camera.getPosition());
 
     // PBR / ORM settings
-    gBufferShader->setUniform("aoBias", aoBias);
-    gBufferShader->setUniform("roughnessBias", roughnessBias);
-    gBufferShader->setUniform("metallicBias", metallicBias);
+   
 
     if (drawPlane)
     {
         drawMesh(*plane, *gBufferShader);
         gBufferShader->setUniform("model", model);
-        gBufferShader->setUniform("hasNormalMap", hasNormal);
+        gBufferShader->setUniform("hasNormalMap", static_cast<bool>(hasNormal[0]));
         gBufferShader->setUniform("hasARMMap", false);
         glDisable(GL_CULL_FACE);
         plane->draw();
         glEnable(GL_CULL_FACE);
     }
 
+    unsigned int index = 0;
     for (const auto& obj : scene.GetObjects()) {
         drawModel(*obj.model, *gBufferShader);
-        gBufferShader->setUniform("hasNormalMap", hasNormal);
+        gBufferShader->setUniform("aoBias", aoBias[index]);
+        gBufferShader->setUniform("roughnessBias", roughnessBias[index]);
+        gBufferShader->setUniform("metallicBias", metallicBias[index]);
+        index++;
+        gBufferShader->setUniform("hasNormalMap", static_cast<bool>(hasNormal[index]));
         gBufferShader->setUniform("hasARMMap", true);
         renderModel(obj.transform, *obj.model, *gBufferShader);
     }
@@ -1125,31 +1147,125 @@ void Renderer::onImGuiRender()
     // --------------------- Renderer Settings --------------------------
     ImGui::Begin("Renderer Settings");
 
-    ImGui::SliderFloat("aoBias", &aoBias, -1.0f, 1.0f);
-    ImGui::SliderFloat("roughnessBias", &roughnessBias, -1.0f, 1.0f);
-    ImGui::SliderFloat("metallicBias", &metallicBias, -1.0f, 1.0f);
-    input.onImGuiRender();
+    static int selectedIndex = 0;
+    auto syncObjectUiState = [&]() {
+        const size_t objectCount = scene.GetObjects().size();
 
-    ImGui::Checkbox("useHeight", &hasHeight);
-    if (hasHeight)
+        if (aoBias.size() != objectCount) aoBias.resize(objectCount, 0.0f);
+        if (roughnessBias.size() != objectCount) roughnessBias.resize(objectCount, 0.0f);
+        if (metallicBias.size() != objectCount) metallicBias.resize(objectCount, 0.0f);
+
+        const size_t normalCount = objectCount + 1; // index 0 is the plane, objects start at 1.
+        if (hasNormal.size() != normalCount) hasNormal.resize(normalCount, 0);
+    };
+
+    auto eraseObjectUiState = [&](int index) {
+        const size_t objectIndex = static_cast<size_t>(index);
+        if (objectIndex < aoBias.size()) aoBias.erase(aoBias.begin() + objectIndex);
+        if (objectIndex < roughnessBias.size()) roughnessBias.erase(roughnessBias.begin() + objectIndex);
+        if (objectIndex < metallicBias.size()) metallicBias.erase(metallicBias.begin() + objectIndex);
+
+        const size_t normalIndex = objectIndex + 1;
+        if (normalIndex < hasNormal.size()) hasNormal.erase(hasNormal.begin() + normalIndex);
+    };
+
+    auto selectedObjectLabel = [&]() {
+        const auto& objects = scene.GetObjects();
+        if (objects.empty()) return std::string("No Object");
+
+        const auto& object = objects[static_cast<size_t>(selectedIndex)];
+        if (object.model && !object.model->getPath().empty())
+        {
+            return "Object " + std::to_string(selectedIndex);
+        }
+
+        return "Object " + std::to_string(selectedIndex);
+    };
+
+    syncObjectUiState();
+
+    auto& objects = scene.GetObjects();
+    if (objects.empty())
     {
-        ImGui::SliderFloat("height_scale", &height_scale, 0.0001f, 0.01f);
+        selectedIndex = 0;
+        ImGui::Text("No model objects in scene.");
+    }
+    else
+    {
+        if (selectedIndex < 0) selectedIndex = 0;
+        if (selectedIndex >= static_cast<int>(objects.size()))
+            selectedIndex = static_cast<int>(objects.size()) - 1;
+
+        const std::string modelName = selectedObjectLabel();
+
+        if (ImGui::BeginCombo("Select Object", modelName.c_str()))
+        {
+            for (int i = 0; i < static_cast<int>(objects.size()); ++i)
+            {
+                std::string label = "Object " + std::to_string(i);
+
+                bool isSelected = (selectedIndex == i);
+                if (ImGui::Selectable(label.c_str(), isSelected))
+                {
+                    selectedIndex = i;
+                }
+
+                if (isSelected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Editing: %s", modelName.c_str());
+
+        ImGui::PushID(selectedIndex);
+
+        ImGui::SliderFloat("aoBias", &aoBias[static_cast<size_t>(selectedIndex)], -1.0f, 1.0f);
+        ImGui::SliderFloat("roughnessBias", &roughnessBias[static_cast<size_t>(selectedIndex)], -1.0f, 1.0f);
+        ImGui::SliderFloat("metallicBias", &metallicBias[static_cast<size_t>(selectedIndex)], -1.0f, 1.0f);
+        objects[static_cast<size_t>(selectedIndex)].transform.onImGuiRender();
+        bool temp = hasNormal[static_cast<size_t>(selectedIndex) + 1];
+        if (ImGui::Checkbox("useNormal", &temp))
+        {
+            hasNormal[static_cast<size_t>(selectedIndex) + 1] = temp ? 1 : 0;
+        }
+
+        ImGui::PopID();
     }
 
-    ImGui::Checkbox("useNormal", &hasNormal);
-    ImGui::SameLine();
     ImGui::Checkbox("useShadow", &useShadows);
     ImGui::SameLine();
-    ImGui::Checkbox("useDeferred", &useDeferred);
-
     ImGui::Checkbox("drawLights", &drawLights);
-    ImGui::SameLine();
-    ImGui::Checkbox("drawPlane", &drawPlane);
+
+    ImGui::Checkbox("useDeferred", &useDeferred);
     ImGui::SameLine();
     ImGui::Checkbox("drawDebug", &drawDebug);
 
-    if (!scene.GetObjects().empty())
-        scene.GetObjects()[0].transform.onImGuiRender();
+    ImGui::Checkbox("drawPlane", &drawPlane);
+
+    if (drawPlane)
+    {
+        ImGui::SameLine();
+
+        bool planeNormal = hasNormal[0];
+        if (ImGui::Checkbox("useNormal", &planeNormal))
+        {
+            hasNormal[0] = planeNormal ? 1 : 0;
+        }
+
+        ImGui::SameLine();
+
+        ImGui::Checkbox("useHeight", &hasHeight);
+        if (hasHeight)
+        {
+            ImGui::SliderFloat("height_scale", &height_scale, 0.0001f, 0.01f);
+        }
+    }
+
+    input.onImGuiRender();
 
     ImGui::End();
 
@@ -1242,49 +1358,217 @@ void Renderer::onImGuiRender()
     static char modelPathBuf[1024] = "../assets/models/blue_metal_plate_4k.gltf/blue_metal_plate_4k.gltf";
     static char hdrPathBuf[1024] = "../assets/hdr/newman_cafeteria_4k.hdr";
     static std::string hotReloadMsg = "Idle";
+    static int assetSelectedIndex = 0;
+    static int pendingModelAction = 0; // 0: none, 1: replace selected, 2: add
 
-    ImGui::InputText("Model Path", modelPathBuf, sizeof(modelPathBuf));
-    //ImGui::SameLine();
-    if (ImGui::Button("Browse Model...")) {
-        // Prepare a FileDialogConfig and set the path
-        IGFD::FileDialogConfig cfg;
-        cfg.path = "../assets/models"; // starting directory (can be changed)
+    auto loadModelFromPath = [&](const std::string& path) {
+        auto& res = ResourceManager::GetInstance();
+        auto mdl = res.LoadModel(path);
+        if (!mdl || mdl->meshes.empty())
+        {
+            hotReloadMsg = "Failed to load model: " + path;
+            return std::shared_ptr<Model>();
+        }
+        return mdl;
+    };
 
-        // Open file dialog
-        ImGuiFileDialog::Instance()->OpenDialog("ChooseModelDlg", "Choose Model", ".gltf", cfg);
+    auto assetObjectLabel = [&](int index) {
+        const auto& currentObjects = scene.GetObjects();
+        if (currentObjects.empty()) return std::string("No Object");
+
+        const auto& object = currentObjects[static_cast<size_t>(index)];
+        if (object.model && !object.model->getPath().empty())
+        {
+            return "Object " + std::to_string(index) + " - " + FileNameFromPath(object.model->getPath());
+        }
+
+        return "Object " + std::to_string(index);
+    };
+
+    auto replaceAssetSelectedModel = [&](const std::string& path) {
+        auto mdl = loadModelFromPath(path);
+        if (!mdl) return;
+
+        auto& currentObjects = scene.GetObjects();
+        if (currentObjects.empty())
+        {
+            scene.AddObject(mdl);
+            syncObjectUiState();
+            assetSelectedIndex = 0;
+            hotReloadMsg = "Model added: " + path;
+            return;
+        }
+
+        if (assetSelectedIndex < 0) assetSelectedIndex = 0;
+        if (assetSelectedIndex >= static_cast<int>(currentObjects.size()))
+            assetSelectedIndex = static_cast<int>(currentObjects.size()) - 1;
+
+        currentObjects[static_cast<size_t>(assetSelectedIndex)].model = mdl;
+        hotReloadMsg = "Replaced selected model: Object " + std::to_string(assetSelectedIndex) + " <- " + path;
+    };
+
+    auto addAssetModel = [&](const std::string& path) {
+        auto mdl = loadModelFromPath(path);
+        if (!mdl) return;
+
+        scene.AddObject(mdl);
+        syncObjectUiState();
+        assetSelectedIndex = static_cast<int>(scene.GetObjects().size()) - 1;
+        hotReloadMsg = "Model added: " + path;
+    };
+
+    auto runPendingModelAction = [&](const std::string& path) {
+        if (pendingModelAction == 1)
+        {
+            replaceAssetSelectedModel(path);
+            pendingModelAction = 0;
+        }
+        else if (pendingModelAction == 2)
+        {
+            addAssetModel(path);
+            pendingModelAction = 0;
+        }
+    };
+
+    auto& assetObjects = scene.GetObjects();
+    if (assetObjects.empty())
+    {
+        assetSelectedIndex = 0;
+        ImGui::Text("No model objects in scene.");
+    }
+    else
+    {
+        if (assetSelectedIndex < 0) assetSelectedIndex = 0;
+        if (assetSelectedIndex >= static_cast<int>(assetObjects.size()))
+            assetSelectedIndex = static_cast<int>(assetObjects.size()) - 1;
+
+        const std::string assetModelName = assetObjectLabel(assetSelectedIndex);
+        if (ImGui::BeginCombo("Select Model", assetModelName.c_str()))
+        {
+            for (int i = 0; i < static_cast<int>(assetObjects.size()); ++i)
+            {
+                const std::string label = assetObjectLabel(i);
+                const bool isSelected = assetSelectedIndex == i;
+                if (ImGui::Selectable(label.c_str(), isSelected))
+                {
+                    assetSelectedIndex = i;
+                    pendingModelAction = 0;
+                    auto selectedModel = assetObjects[static_cast<size_t>(assetSelectedIndex)].model;
+                    if (selectedModel && !selectedModel->getPath().empty())
+                    {
+                        SafeCopyPath(modelPathBuf, sizeof(modelPathBuf), selectedModel->getPath());
+                    }
+                }
+
+                if (isSelected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
     }
 
-    ImGui::SetNextWindowDockID(left_bottom_id, ImGuiCond_FirstUseEver);
-    //ImGui::SetNextWindowSize(ImVec2(600, 600), ImGuiCond_FirstUseEver);
-
-    // Display model file dialog and auto-load on selection
-    if (ImGuiFileDialog::Instance()->Display("ChooseModelDlg")) {
-        if (ImGuiFileDialog::Instance()->IsOk()) {
-            std::string chosen = ImGuiFileDialog::Instance()->GetFilePathName();
-            SafeCopyPath(modelPathBuf, sizeof(modelPathBuf), chosen);
-            modelPathBuf[sizeof(modelPathBuf)-1] = '\0';
-
-            // Load/replace model immediately (replace first object)
-            auto& res = ResourceManager::GetInstance();
-            auto mdl = res.LoadModel(chosen);
-            if (mdl) {
-                if (!scene.GetObjects().empty())
-                    scene.GetObjects()[0].model = mdl;
-                else
-                    scene.AddObject(mdl);
-                hotReloadMsg = "Model loaded: " + chosen;
-            } else {
-                hotReloadMsg = "Failed to load model: " + chosen;
-            }
+    if (ImGui::Button("Reload Selected Model")) {
+        std::string path;
+        if (assetObjects.empty() ||
+            assetSelectedIndex < 0 ||
+            assetSelectedIndex >= static_cast<int>(assetObjects.size()))
+        {
+            hotReloadMsg = "No selected model to reload.";
         }
-        ImGuiFileDialog::Instance()->Close();
+        else if (assetObjects[static_cast<size_t>(assetSelectedIndex)].model)
+        {
+            auto selectedModel = assetObjects[static_cast<size_t>(assetSelectedIndex)].model;
+            path = selectedModel->getPath();
+
+            bool ok = !path.empty() && selectedModel->reload(path);
+            hotReloadMsg = ok
+                ? ("Reloaded selected model: Object " + std::to_string(assetSelectedIndex) + " <- " + path)
+                : ("Reload selected model failed: " + path);
+        }
+        else
+        {
+            hotReloadMsg = "Selected object has no model to reload.";
+        }
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Reload Model (same path)")) {
-        std::string path(modelPathBuf);
-        bool ok = ResourceManager::GetInstance().ReloadModel(path);
-        hotReloadMsg = ok ? ("Reloaded model: " + path) : ("Reload model failed: " + path);
+    if (ImGui::Button("Delete Selected Model")) {
+        if (assetObjects.empty() ||
+            assetSelectedIndex < 0 ||
+            assetSelectedIndex >= static_cast<int>(assetObjects.size()))
+        {
+            hotReloadMsg = "No selected model to delete.";
+        }
+        else
+        {
+            const int deletedIndex = assetSelectedIndex;
+            if (scene.RemoveObject(static_cast<size_t>(assetSelectedIndex)))
+            {
+                eraseObjectUiState(deletedIndex);
+                syncObjectUiState();
+                if (assetSelectedIndex >= static_cast<int>(scene.GetObjects().size()))
+                    assetSelectedIndex = static_cast<int>(scene.GetObjects().size()) - 1;
+                if (assetSelectedIndex < 0) assetSelectedIndex = 0;
+                pendingModelAction = 0;
+                hotReloadMsg = "Deleted model object: Object " + std::to_string(deletedIndex);
+            }
+            else
+            {
+                hotReloadMsg = "Delete selected model failed.";
+            }
+        }
+    }
+
+    if (ImGui::Button("Replace Model...")) {
+        pendingModelAction = 1;
+        if (!assetObjects.empty() &&
+            assetSelectedIndex >= 0 &&
+            assetSelectedIndex < static_cast<int>(assetObjects.size()))
+        {
+            auto selectedModel = assetObjects[static_cast<size_t>(assetSelectedIndex)].model;
+            if (selectedModel && !selectedModel->getPath().empty())
+            {
+                SafeCopyPath(modelPathBuf, sizeof(modelPathBuf), selectedModel->getPath());
+            }
+        }
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Add Model...")) {
+        pendingModelAction = 2;
+    }
+
+    if (pendingModelAction != 0)
+    {
+        ImGui::Separator();
+        ImGui::Text("%s", pendingModelAction == 1 ? "Replace selected model" : "Add model");
+        ImGui::InputText("Model Path", modelPathBuf, sizeof(modelPathBuf));
+
+        if (ImGui::Button("Browse Model...")) {
+            IGFD::FileDialogConfig cfg;
+            cfg.path = "../assets/models";
+            ImGuiFileDialog::Instance()->OpenDialog("ChooseModelDlg", "Choose Model", ".gltf", cfg);
+        }
+
+        ImGui::SetNextWindowDockID(left_bottom_id, ImGuiCond_FirstUseEver);
+        if (ImGuiFileDialog::Instance()->Display("ChooseModelDlg")) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string chosen = ImGuiFileDialog::Instance()->GetFilePathName();
+                SafeCopyPath(modelPathBuf, sizeof(modelPathBuf), chosen);
+                modelPathBuf[sizeof(modelPathBuf)-1] = '\0';
+                runPendingModelAction(chosen);
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+    }
+    else
+    {
+        if (ImGuiFileDialog::Instance()->Display("ChooseModelDlg"))
+        {
+            ImGuiFileDialog::Instance()->Close();
+        }
     }
 
     ImGui::Separator();

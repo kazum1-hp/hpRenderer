@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <memory>
+#include <cstddef>
 #include "Model.h"
 #include "Light.h"
 #include "Skybox.h"
@@ -55,6 +56,12 @@ public:
         obj.transform.setScale(scale);
         obj.material = mat;
         objects.push_back(obj);
+    }
+
+    bool RemoveObject(std::size_t index) {
+        if (index >= objects.size()) return false;
+        objects.erase(objects.begin() + index);
+        return true;
     }
 
     // --- Lighting Management ---

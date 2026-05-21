@@ -115,6 +115,7 @@ public:
             // Loading not yet, load directly and return whether it was successful.
             try {
                 auto model = std::make_shared<Model>(path);
+                if (!model || model->meshes.empty()) return false;
                 models[path] = model;
                 return true;
             } catch (...) {
@@ -123,8 +124,7 @@ public:
         } else {
             if (!it->second) return false;
             // Call Model::reload (this method needs to be provided by the Model).
-            it->second->reload(path);
-            return true;
+            return it->second->reload(path);
         }
     }
 
@@ -176,10 +176,10 @@ public:
  
         std::vector<float> planeVertices = {
                 // pos             // normal         // uv       // tangent       // bitangent
-             25, -1,  25,           0, 1, 0,         25,  0,      1, 0, 0,          0, 0, -1,
-            -25, -1,  25,           0, 1, 0,          0,  0,      1, 0, 0,          0, 0, -1,
-            -25, -1, -25,           0, 1, 0,          0, 25,      1, 0, 0,          0, 0, -1,
-             25, -1, -25,           0, 1, 0,         25, 25,      1, 0, 0,          0, 0, -1
+             25, -5.5f,  25,           0, 1, 0,         25,  0,      1, 0, 0,          0, 0, -1,
+            -25, -5.5f,  25,           0, 1, 0,          0,  0,      1, 0, 0,          0, 0, -1,
+            -25, -5.5f, -25,           0, 1, 0,          0, 25,      1, 0, 0,          0, 0, -1,
+             25, -5.5f, -25,           0, 1, 0,         25, 25,      1, 0, 0,          0, 0, -1
         };
 
         std::vector<unsigned int> p_indices = {

@@ -89,7 +89,7 @@ private:
 	bool pointShadows = true;
 	bool useShadows = false;
 
-	bool hasNormal = false;
+	std::vector<uint8_t> hasNormal;
 	bool hasHeight = false;
 	float height_scale = 0.001f;
 	bool hasARMMap = false;
@@ -99,9 +99,9 @@ private:
 	bool useBloom = false;
 	float exposure = 1.0f;
 
-	float aoBias = 0.0f;
-	float roughnessBias = 0.0f;
-	float metallicBias = 0.0f;
+	std::vector<float> aoBias;
+	std::vector<float> roughnessBias;
+	std::vector<float> metallicBias;
 
 	bool useDeferred = false;
 	bool usePostProcess = false;
