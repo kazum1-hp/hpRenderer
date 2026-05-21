@@ -186,7 +186,7 @@ hpRenderer/
 
 ## Recent Updates
 - Added new HDR tone mapping methods.
-
+- Added support for multiple objects.
 
 ---
 
