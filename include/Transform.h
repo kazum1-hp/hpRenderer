@@ -10,11 +10,20 @@ private:
 	glm::vec3 position{ 0.0f };
 	glm::vec3 rotation{ 0.0f };
 	glm::vec3 scale{ 1.0f, 1.0f, 1.0f };
+    glm::vec3 initialPosition{ 0.0f };
+    glm::vec3 initialScale{ 1.0f, 1.0f, 1.0f };
 
 public:
     void setPosition(glm::vec3 pos) { position = pos; }
     void setRotation(glm::vec3 rot) { rotation = rot; }
     void setScale(glm::vec3 s) { scale = s; }
+    void setInitialTransform(glm::vec3 pos, glm::vec3 s)
+    {
+        initialPosition = pos;
+        initialScale = s;
+        position = pos;
+        scale = s;
+    }
 
 	glm::mat4 getModelMatrix() const
 	{
@@ -61,9 +70,9 @@ public:
             // Reset buttons
             if (ImGui::Button("Reset"))
             {
-                position = glm::vec3(0.0f);
+                position = initialPosition;
                 rotation = glm::vec3(0.0f);
-                scale = glm::vec3(0.5f);
+                scale = initialScale;
             }
 
             ImGui::SameLine();

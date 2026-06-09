@@ -7,6 +7,12 @@ uniform float fov;
 uniform float nearPlane;
 uniform float farPlane;
 
+// Renderer reads these labels after this shader hot-reloads successfully.
+// @debugLabel 0 Normal
+// @debugLabel 1 Roughness
+// @debugLabel 2 Metallic
+// @debugLabel 3 Depth
+
 in vec2 TexCoords;
 out vec4 FragColor;
 

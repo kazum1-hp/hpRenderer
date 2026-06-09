@@ -58,7 +58,7 @@ void Application::init()
 	auto model3 = res.LoadModel("../assets/models/marble_bust_01_4k/marble_bust_01_4k.gltf");
 
 	auto material = res.LoadMaterial("material");
-	auto environmentMap = res.LoadTexture("../assets/hdr/newman_cafeteria_4k.hdr", HDR);
+	auto environmentMap = res.LoadTexture("../assets/hdr/newport_loft.hdr", HDR);
 
 	auto envAsset = std::make_shared<EnvironmentAsset>();
 	envAsset->hdrTexture = environmentMap ? environmentMap->getID() : 0;

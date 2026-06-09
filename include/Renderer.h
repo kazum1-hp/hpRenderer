@@ -14,6 +14,7 @@
 #include "../third_party/ImGuiFileDialog/ImGuiFileDialog.h"
 #include "../third_party/ImGuiFileDialog/ImGuiFileDialogConfig.h"
 
+#include <array>
 #include <vector>
 #include <memory>
 #include <sstream>
@@ -108,6 +109,7 @@ private:
 	bool drawLights = false;
 	bool drawPlane = false;
 	bool drawDebug = false;
+	std::array<std::string, 4> debugLabels = { "Normal", "Roughness", "Metallic", "Depth" };
 
 	int framebufferWidth = 0;
 	int framebufferHeight = 0;
@@ -121,6 +123,7 @@ private:
 	void drawMesh(const Mesh& mesh, Shader& shader) const;
 	void drawModel(const Model& model, Shader& shader) const;
 	void resizeFrameBuffer(unsigned int newWidth, unsigned int newHeight);
+	void refreshDebugLabels();
 
 	void forwardPass(Scene& scene);
 	void deferredPass(Scene& scene);

@@ -2,6 +2,9 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <string>
+#include <array>
+#include <cctype>
+#include <fstream>
 #include <glm/gtx/string_cast.hpp>
 #include <glm/gtc/matrix_access.hpp>
 #include "../include/ResourceManager.h"
@@ -20,6 +23,65 @@ static inline std::string FileNameFromPath(const std::string& path)
 {
     const size_t pos = path.find_last_of("/\\");
     return pos == std::string::npos ? path : path.substr(pos + 1);
+}
+
+static inline std::string Trim(const std::string& value)
+{
+    size_t begin = 0;
+    while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin]))) ++begin;
+
+    size_t end = value.size();
+    while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1]))) --end;
+
+    return value.substr(begin, end - begin);
+}
+
+static bool ParseDebugLabelMarker(const std::string& comment, int& index, std::string& label)
+{
+    constexpr const char* marker = "@debugLabel";
+    constexpr size_t markerLength = 11;
+
+    if (comment.compare(0, markerLength, marker) != 0)
+    {
+        return false;
+    }
+
+    std::istringstream stream(comment.substr(markerLength));
+    if (!(stream >> index))
+    {
+        return false;
+    }
+
+    std::getline(stream, label);
+    label = Trim(label);
+
+    return index >= 0 && index < 4 && !label.empty();
+}
+
+static bool TryParseDebugModeIndex(const std::string& line, int& index)
+{
+    const size_t modePos = line.find("u_DebugMode");
+    if (modePos == std::string::npos)
+    {
+        return false;
+    }
+
+    const size_t equalsPos = line.find("==", modePos);
+    if (equalsPos == std::string::npos)
+    {
+        return false;
+    }
+
+    size_t numberPos = equalsPos + 2;
+    while (numberPos < line.size() && std::isspace(static_cast<unsigned char>(line[numberPos]))) ++numberPos;
+
+    if (numberPos >= line.size() || !std::isdigit(static_cast<unsigned char>(line[numberPos])))
+    {
+        return false;
+    }
+
+    index = line[numberPos] - '0';
+    return index >= 0 && index < 4;
 }
 
 static inline void DeleteTextureIfNeeded(GLuint& texture)
@@ -107,6 +169,7 @@ void Renderer::init()
     lightPassShader = res.GetShader("lightPass");
     debugShader = res.GetShader("debug");
     gbufferDebugShader = res.GetShader("gbuffer debug");
+    refreshDebugLabels();
     backgroundShader = res.GetShader("background");
     irradianceShader = res.GetShader("irradiance");
     prefilterShader = res.GetShader("prefilter");
@@ -1029,6 +1092,67 @@ void Renderer::resizeFrameBuffer(unsigned int newWidth, unsigned int newHeight)
     framebufferHeight = newHeight;
 }
 
+void Renderer::refreshDebugLabels()
+{
+    debugLabels = { "Normal", "Roughness", "Metallic", "Depth" };
+
+    if (!gbufferDebugShader)
+    {
+        return;
+    }
+
+    std::ifstream file(gbufferDebugShader->GetFragmentPath());
+    if (!file.is_open())
+    {
+        std::cerr << "WARN::DRAW_DEBUG_LABELS::FILE_NOT_READ: "
+                  << gbufferDebugShader->GetFragmentPath() << std::endl;
+        return;
+    }
+
+    std::array<bool, 4> found = { false, false, false, false };
+    int pendingMode = -1;
+    std::string line;
+
+    while (std::getline(file, line))
+    {
+        const size_t commentPos = line.find("//");
+        if (commentPos != std::string::npos)
+        {
+            const std::string comment = Trim(line.substr(commentPos + 2));
+            int markerIndex = -1;
+            std::string markerLabel;
+            if (ParseDebugLabelMarker(comment, markerIndex, markerLabel))
+            {
+                debugLabels[static_cast<size_t>(markerIndex)] = markerLabel;
+                found[static_cast<size_t>(markerIndex)] = true;
+                pendingMode = -1;
+                continue;
+            }
+
+            if (pendingMode >= 0 && !found[static_cast<size_t>(pendingMode)] && !comment.empty())
+            {
+                debugLabels[static_cast<size_t>(pendingMode)] = comment;
+                found[static_cast<size_t>(pendingMode)] = true;
+                pendingMode = -1;
+                continue;
+            }
+        }
+
+        int modeIndex = -1;
+        if (TryParseDebugModeIndex(line, modeIndex))
+        {
+            pendingMode = modeIndex;
+            continue;
+        }
+
+        const std::string trimmed = Trim(line);
+        if (pendingMode >= 0 && !trimmed.empty() && trimmed != "{")
+        {
+            pendingMode = -1;
+        }
+    }
+}
+
 std::stringstream Renderer::buffer;
 
 void Renderer::InitConsole()
@@ -1233,16 +1357,14 @@ void Renderer::onImGuiRender()
             hasNormal[static_cast<size_t>(selectedIndex) + 1] = temp ? 1 : 0;
         }
 
+        input.onImGuiRender();
+
         ImGui::PopID();
     }
 
     ImGui::Checkbox("useShadow", &useShadows);
     ImGui::SameLine();
     ImGui::Checkbox("drawLights", &drawLights);
-
-    ImGui::Checkbox("useDeferred", &useDeferred);
-    ImGui::SameLine();
-    ImGui::Checkbox("drawDebug", &drawDebug);
 
     ImGui::Checkbox("drawPlane", &drawPlane);
 
@@ -1265,7 +1387,12 @@ void Renderer::onImGuiRender()
         }
     }
 
-    input.onImGuiRender();
+    ImGui::Checkbox("useDeferred", &useDeferred);
+    if (useDeferred)
+    {
+        ImGui::SameLine();
+        ImGui::Checkbox("drawDebug", &drawDebug);
+    }
 
     ImGui::End();
 
@@ -1340,6 +1467,9 @@ void Renderer::onImGuiRender()
                 prefilterShader->use();
                 prefilterShader->setUniform("environmentMap", 0);
             }
+            else if (name == "gbuffer debug" && gbufferDebugShader) {
+                refreshDebugLabels();
+            }
         };
 
         for (const auto& r : results) {
@@ -1356,7 +1486,7 @@ void Renderer::onImGuiRender()
     // ------------------- Hot Reload Assets ----------------------
     ImGui::Begin("Reload Assets");
     static char modelPathBuf[1024] = "../assets/models/blue_metal_plate_4k.gltf/blue_metal_plate_4k.gltf";
-    static char hdrPathBuf[1024] = "../assets/hdr/newman_cafeteria_4k.hdr";
+    static char hdrPathBuf[1024] = "../assets/hdr/newport_loft.hdr";
     static std::string hotReloadMsg = "Idle";
     static int assetSelectedIndex = 0;
     static int pendingModelAction = 0; // 0: none, 1: replace selected, 2: add
@@ -1673,13 +1803,6 @@ void Renderer::onImGuiRender()
         {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-            const char* labels[] = {
-                "Normal",
-                "Roughness",
-                "Metallic",
-                "Depth"
-            };
-
             float debugH = size.y / 4.0f;
             float padding = 6.0f;
 
@@ -1687,10 +1810,12 @@ void Renderer::onImGuiRender()
             {
                 float x = imagePos.x + 10.0f;
                 float y = imagePos.y + i * debugH + 10.0f;
+                const char* label = debugLabels[static_cast<size_t>(i)].c_str();
+                ImVec2 textSize = ImGui::CalcTextSize(label);
 
                 // background (clearer/readable)
                 ImVec2 bgMin(x - padding, y - padding);
-                ImVec2 bgMax(x + 75.0f, y + 18.0f);
+                ImVec2 bgMax(x + textSize.x + padding, y + textSize.y + padding);
 
                 drawList->AddRectFilled(
                     bgMin,
@@ -1702,7 +1827,7 @@ void Renderer::onImGuiRender()
                 drawList->AddText(
                     ImVec2(x, y),
                     IM_COL32(255, 255, 0, 255),
-                    labels[i]
+                    label
                 );
             }
         }

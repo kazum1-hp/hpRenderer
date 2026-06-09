@@ -52,8 +52,7 @@ public:
     void AddObject(std::shared_ptr<Model> model, glm::vec3 pos = glm::vec3(0.0f), glm::vec3 scale = glm::vec3(1.0f), std::shared_ptr<Material> mat = nullptr) {
         RenderObject obj;
         obj.model = model;
-        obj.transform.setPosition(pos);
-        obj.transform.setScale(scale);
+        obj.transform.setInitialTransform(pos, scale);
         obj.material = mat;
         objects.push_back(obj);
     }
