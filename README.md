@@ -8,6 +8,12 @@ Developed from scratch, it implements physically-based rendering (PBR), image-ba
 
 ---
 
+## Download
+
+Download the latest executable **[here](https://github.com/kazum1-hp/hpRenderer/releases)** .
+
+---
+
 ##  Screenshots
 
 ### Main Interface
