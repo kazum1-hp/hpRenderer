@@ -1,5 +1,6 @@
 #include "../include/FrameBuffer.h"
 #include <iostream>
+#include <utility>
 
 FrameBuffer::FrameBuffer(Window& window, bool useDepth, bool useMs, bool useDepthMap2D, bool useDepthCube, bool useHdr, int colorCount, bool useGbuffer)
 	: width(window.getWidth()), height(window.getHeight()),
@@ -58,7 +59,7 @@ void FrameBuffer::init(unsigned int w, unsigned int h)
             }
         }
         else {
-            // MSAA texture£¨do not support HDR£¬only 1 color attachment£©
+            // MSAA texture (does not support HDR, only one color attachment)
             if (m_colorCount > 1) {
                 std::cerr << "ERROR: MSAA Framebuffer cannot have multiple color attachments!" << std::endl;
                 m_colorCount = 1;  // reduce to 1
@@ -80,7 +81,7 @@ void FrameBuffer::init(unsigned int w, unsigned int h)
         glDrawBuffers(static_cast<GLsizei>(attachments.size()), attachments.data());
     }
     else {
-        // ShadowMap£ºno color attachment
+        // Shadow map: no color attachment
         glDrawBuffer(GL_NONE);
         glReadBuffer(GL_NONE);
     }
@@ -151,6 +152,10 @@ void FrameBuffer::cleanUp()
             texColors[i] = 0;
         }
     }
+    if (gDepth != 0) {
+        glDeleteTextures(1, &gDepth);
+        gDepth = 0;
+    }
     if (texDepth2D) {
         glDeleteTextures(1, &texDepth2D);
         texDepth2D = 0;
@@ -186,4 +191,40 @@ void FrameBuffer::resize(unsigned int newWidth, unsigned int newHeight)
 FrameBuffer::~FrameBuffer()
 {
     cleanUp();
+}
+
+FrameBuffer::FrameBuffer(FrameBuffer&& other) noexcept
+{
+    moveFrom(std::move(other));
+}
+
+FrameBuffer& FrameBuffer::operator=(FrameBuffer&& other) noexcept
+{
+    if (this == &other) return *this;
+
+    cleanUp();
+    moveFrom(std::move(other));
+    return *this;
+}
+
+void FrameBuffer::moveFrom(FrameBuffer&& other) noexcept
+{
+    width = other.width;
+    height = other.height;
+    FBO = std::exchange(other.FBO, 0);
+    RBO = std::exchange(other.RBO, 0);
+    for (int i = 0; i < MAX_COLOR_ATTACHMENTS; ++i)
+    {
+        texColors[i] = std::exchange(other.texColors[i], 0);
+    }
+    texDepth2D = std::exchange(other.texDepth2D, 0);
+    texDepthCube = std::exchange(other.texDepthCube, 0);
+    gDepth = std::exchange(other.gDepth, 0);
+    m_useDepth = other.m_useDepth;
+    m_useMs = other.m_useMs;
+    m_useDepthMap2D = other.m_useDepthMap2D;
+    m_useDepthCube = other.m_useDepthCube;
+    m_useHdr = other.m_useHdr;
+    m_useGbuffer = other.m_useGbuffer;
+    m_colorCount = std::exchange(other.m_colorCount, 0);
 }

@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <utility>
 
 Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath, const std::string& geometryPath)
 	:vertexPath(vertexPath), fragmentPath(fragmentPath), geometryPath(geometryPath)
@@ -92,6 +93,46 @@ Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath, c
 	glDeleteShader(fragment);
 	if (!geometryCode.empty())
 		glDeleteShader(geometry);
+}
+
+Shader::~Shader()
+{
+	if (ID != 0)
+	{
+		glDeleteProgram(ID);
+	}
+}
+
+Shader::Shader(Shader&& other) noexcept
+	: ID(std::exchange(other.ID, 0)),
+	  vertexPath(std::move(other.vertexPath)),
+	  fragmentPath(std::move(other.fragmentPath)),
+	  geometryPath(std::move(other.geometryPath)),
+	  lastVertexWriteTime(other.lastVertexWriteTime),
+	  lastFragmentWriteTime(other.lastFragmentWriteTime),
+	  lastGeometryWriteTime(other.lastGeometryWriteTime),
+	  uniformCache(std::move(other.uniformCache))
+{
+}
+
+Shader& Shader::operator=(Shader&& other) noexcept
+{
+	if (this == &other) return *this;
+
+	if (ID != 0)
+	{
+		glDeleteProgram(ID);
+	}
+
+	ID = std::exchange(other.ID, 0);
+	vertexPath = std::move(other.vertexPath);
+	fragmentPath = std::move(other.fragmentPath);
+	geometryPath = std::move(other.geometryPath);
+	lastVertexWriteTime = other.lastVertexWriteTime;
+	lastFragmentWriteTime = other.lastFragmentWriteTime;
+	lastGeometryWriteTime = other.lastGeometryWriteTime;
+	uniformCache = std::move(other.uniformCache);
+	return *this;
 }
 
 void Shader::use() const{

@@ -23,6 +23,7 @@ private:
 
 	void init(unsigned int w, unsigned int h);
 	void cleanUp();
+	void moveFrom(FrameBuffer&& other) noexcept;
 
 public:
 	FrameBuffer(Window& window, bool useDepth = true, bool useMs = false, bool useDepthMap2D = false, bool useDepthCube = false, bool useHdr = false, int colorCount = 1, bool useGbuffer = false);
@@ -30,6 +31,11 @@ public:
 	FrameBuffer(unsigned int w = 1920, unsigned int h = 1080, bool useDepth = true, bool useMs = false, bool useDepthMap2D = false, bool useDepthCube = false, bool useHdr = false, int colorCount = 1, bool useGbuffer = false);
 
 	~FrameBuffer();
+
+	FrameBuffer(const FrameBuffer&) = delete;
+	FrameBuffer& operator=(const FrameBuffer&) = delete;
+	FrameBuffer(FrameBuffer&& other) noexcept;
+	FrameBuffer& operator=(FrameBuffer&& other) noexcept;
 
 	void resize(unsigned int newWidth, unsigned int newHeight);
 

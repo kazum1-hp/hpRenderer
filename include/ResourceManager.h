@@ -29,6 +29,16 @@ public:
     ResourceManager(const ResourceManager&) = delete;
     ResourceManager& operator=(const ResourceManager&) = delete;
 
+    void Clear() {
+        models.clear();
+        screenQuad.reset();
+        plane.reset();
+        cube.reset();
+        textures.clear();
+        shaders.clear();
+        materials.clear();
+    }
+
     // --- Shader ---
     std::shared_ptr<Shader> LoadShader(const std::string& name, const std::string& vsPath, const std::string& fsPath, const std::string& gsPath = "") {
         if (shaders.find(name) != shaders.end()) return shaders[name];

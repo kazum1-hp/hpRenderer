@@ -9,6 +9,7 @@
 #include "InputManager.h"
 #include "Window.h"
 #include "Transform.h"
+#include "RenderLimits.h"
 #include "../third_party/imgui/imgui.h"
 #include "../third_party/imgui/imgui_internal.h"
 #include "../third_party/ImGuiFileDialog/ImGuiFileDialog.h"
@@ -86,8 +87,6 @@ private:
 	const unsigned int SHADOW_Size = 1024;
 	const unsigned int resolution = 1024;
 
-	bool parallelShadows = true;
-	bool pointShadows = true;
 	bool useShadows = false;
 
 	std::vector<uint8_t> hasNormal;
@@ -118,10 +117,11 @@ private:
 	static void releaseEnvironmentMaps(Environment& env);
 	void prepareEnvironment(Environment& env);
 	void generateIBLMaps(Environment& env);
+	void syncPointShadowFramebuffers(std::size_t count);
 
 	void renderModel(const Transform& transform, const Model& model, Shader& shader);
-	void drawMesh(const Mesh& mesh, Shader& shader) const;
-	void drawModel(const Model& model, Shader& shader) const;
+	void drawMesh(const Mesh& mesh, Shader& shader, bool useNormalMap, bool useHeightMap, bool useARMMap) const;
+	void drawModel(const Model& model, Shader& shader, bool useNormalMap, bool useHeightMap, bool useARMMap) const;
 	void resizeFrameBuffer(unsigned int newWidth, unsigned int newHeight);
 	void refreshDebugLabels();
 
@@ -136,6 +136,7 @@ public:
 	Renderer(Camera& cam, InputManager& input, Window& win, Scene& scene);
 	~Renderer();
 	void init();
+	void shutdown();
 	void render(Scene& scene);
 	static void InitConsole();
 	void onImGuiRender();

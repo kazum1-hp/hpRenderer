@@ -177,4 +177,9 @@ Application::~Application()
 	{
 		shutdownImGui();
 	}
+
+	// Release every OpenGL-backed resource while the window/context still exists.
+	renderer.shutdown();
+	mainScene.Clear();
+	ResourceManager::GetInstance().Clear();
 }

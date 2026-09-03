@@ -7,6 +7,7 @@
 #include "Skybox.h"
 #include "Transform.h"
 #include "Material.h"
+#include "RenderLimits.h"
 
 // In order to place the model in the scene, we need a struct to store the model pointer and position information.
 struct RenderObject {
@@ -64,8 +65,19 @@ public:
     }
 
     // --- Lighting Management ---
-    void AddPointLight(const Light& light) {
+    bool AddPointLight(const Light& light) {
+        if (pointLights.size() >= RenderLimits::MaxPointLights) return false;
         pointLights.push_back(light);
+        return true;
+    }
+
+    Light& GetPointLight(std::size_t index) { return pointLights.at(index); }
+
+    void Clear() {
+        objects.clear();
+        pointLights.clear();
+        skybox.reset();
+        environment = {};
     }
 
     void SetEnvironment(std::shared_ptr<EnvironmentAsset> envAsset) {
@@ -77,7 +89,6 @@ public:
     const std::vector<RenderObject>& GetObjects() const { return objects; }
     std::vector<RenderObject>& GetObjects() { return objects; }
     const std::vector<Light>& GetPointLights() const { return pointLights; }
-    std::vector<Light>& GetPointLights() { return pointLights; }
     const Light& GetDirLight() const { return dirLight; }
     Light& GetDirLight() { return dirLight; }
 

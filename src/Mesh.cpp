@@ -1,5 +1,6 @@
 #include "../include/Mesh.h"
 #include <iostream>
+#include <utility>
 
 Mesh::Mesh(const Geometry& geometry, const std::vector<std::shared_ptr<Texture>>& texs)
 	:textures(texs)
@@ -108,8 +109,44 @@ void Mesh::setInstanceTransforms(const std::vector<glm::mat4>& transforms)
 
 Mesh::~Mesh()
 {
-	glDeleteVertexArrays(1, &VAO);
-	glDeleteBuffers(1, &VBO);
-	glDeleteBuffers(1, &EBO);
+	cleanUp();
+}
+
+Mesh::Mesh(Mesh&& other) noexcept
+{
+	moveFrom(std::move(other));
+}
+
+Mesh& Mesh::operator=(Mesh&& other) noexcept
+{
+	if (this == &other) return *this;
+
+	cleanUp();
+	moveFrom(std::move(other));
+	return *this;
+}
+
+void Mesh::cleanUp()
+{
+	if (VAO != 0) glDeleteVertexArrays(1, &VAO);
+	if (VBO != 0) glDeleteBuffers(1, &VBO);
+	if (EBO != 0) glDeleteBuffers(1, &EBO);
 	if (instanceVBO != 0) glDeleteBuffers(1, &instanceVBO);
+
+	VAO = 0;
+	VBO = 0;
+	EBO = 0;
+	instanceVBO = 0;
+	indexCount = 0;
+}
+
+void Mesh::moveFrom(Mesh&& other) noexcept
+{
+	VAO = std::exchange(other.VAO, 0);
+	VBO = std::exchange(other.VBO, 0);
+	EBO = std::exchange(other.EBO, 0);
+	instanceVBO = std::exchange(other.instanceVBO, 0);
+	indexCount = std::exchange(other.indexCount, 0);
+	attributes = std::move(other.attributes);
+	textures = std::move(other.textures);
 }

@@ -2,6 +2,8 @@
 layout (location = 0) out vec4 FragColor;
 layout (location = 1) out vec4 BrightColor;
 
+const int MAX_POINT_LIGHTS = 4;
+
 in VS_OUT{
 	vec2 TexCoords;
 	vec3 Normal;
@@ -29,6 +31,7 @@ struct PointLight {
 	float constant;
     float linear;
     float quadratic;
+	float farPlane;
 
 	bool enabled;
 };
@@ -36,10 +39,11 @@ struct PointLight {
 //uniform Material material;
 
 uniform ParallelLight parallelLight;
-uniform PointLight pointLight[4];
+uniform PointLight pointLight[MAX_POINT_LIGHTS];
+uniform int pointLightCount;
 
 uniform sampler2D depthMap;
-uniform samplerCube shadowMap[4];
+uniform samplerCube shadowMap[MAX_POINT_LIGHTS];
 
 uniform samplerCube irradianceMap;
 uniform samplerCube prefilterMap;
@@ -65,7 +69,6 @@ uniform bool useQuadratic;
 uniform bool usePost;
 uniform float time;
 
-uniform float far_plane;
 uniform bool parallelShadows;
 uniform bool pointShadows;
 
@@ -123,7 +126,7 @@ void main()
 	{
 		vec3 normalTex = texture(normal, texCoords).xyz;
 		normalTex = normalTex * 2.0 - 1.0;
-		// If the Y channel is reversed£º
+		// If the Y channel is reversed:
 		//normalTex.y = -normalTex.y;
 		norm = normalize(TBN * normalTex);
 	}
@@ -146,8 +149,10 @@ void main()
 
 	vec3 pointColor = vec3(0.0);
 
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < MAX_POINT_LIGHTS; ++i)
 	{
+		if (i >= pointLightCount) break;
+		if (!pointLight[i].enabled) continue;
 		vec3 pointLightDir = normalize(pointLight[i].position - fs_in.FragPos);
 
 		float pointShadow = pointShadows ? PointShadowCalculation(fs_in.FragPos, N, pointLight[i], shadowMap[i]) : 0.0;
@@ -317,14 +322,14 @@ float PointShadowCalculation(vec3 fragPos, vec3 normal, PointLight pointLight, s
     vec3 lightDir = normalize(pointLight.position - fragPos);
     float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
 
-    float diskRadius = clamp(0.02 * currentDepth / far_plane, 0.001, 0.02);
+    float diskRadius = clamp(0.02 * currentDepth / pointLight.farPlane, 0.001, 0.02);
 
     for(int i = 0; i < samples; ++i)
     {
         vec3 sampleDir = normalize(fragToLight + normalize(gridSamplingDisk[i]) * diskRadius);
 
         float closestDepth = texture(shadowMap, sampleDir).r;
-        closestDepth *= far_plane;
+        closestDepth *= pointLight.farPlane;
 
         if(currentDepth > closestDepth + bias)
             shadow += 1.0;
@@ -421,4 +426,4 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
 vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}   
+}

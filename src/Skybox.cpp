@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <utility>
 
 Skybox::Skybox()
 {
@@ -18,6 +19,13 @@ Skybox::Skybox()
 
 void Skybox::LoadFromFiles(const std::vector<std::string>& faces)
 {
+    if (ID != 0)
+    {
+        glDeleteTextures(1, &ID);
+        ID = 0;
+    }
+
+    stbi_set_flip_vertically_on_load(false);
     glGenTextures(1, &ID);
     glBindTexture(GL_TEXTURE_CUBE_MAP, ID);
 
@@ -54,9 +62,30 @@ void Skybox::LoadFromFiles(const std::vector<std::string>& faces)
 
 Skybox::~Skybox()
 {
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-    glDeleteTextures(1, &ID);
+    if (VAO != 0) glDeleteVertexArrays(1, &VAO);
+    if (VBO != 0) glDeleteBuffers(1, &VBO);
+    if (ID != 0) glDeleteTextures(1, &ID);
+}
+
+Skybox::Skybox(Skybox&& other) noexcept
+    : VAO(std::exchange(other.VAO, 0)),
+      VBO(std::exchange(other.VBO, 0)),
+      ID(std::exchange(other.ID, 0))
+{
+}
+
+Skybox& Skybox::operator=(Skybox&& other) noexcept
+{
+    if (this == &other) return *this;
+
+    if (VAO != 0) glDeleteVertexArrays(1, &VAO);
+    if (VBO != 0) glDeleteBuffers(1, &VBO);
+    if (ID != 0) glDeleteTextures(1, &ID);
+
+    VAO = std::exchange(other.VAO, 0);
+    VBO = std::exchange(other.VBO, 0);
+    ID = std::exchange(other.ID, 0);
+    return *this;
 }
 
 void Skybox::bind() const

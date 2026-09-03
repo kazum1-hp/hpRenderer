@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <array>
+#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <glm/gtx/string_cast.hpp>
@@ -10,6 +11,14 @@
 #include "../include/ResourceManager.h"
 #include "../include/Scene.h"
 #include <cstdio> // for std::snprintf
+
+namespace
+{
+    std::size_t PointLightCount(const Scene& scene)
+    {
+        return std::min(scene.GetPointLights().size(), RenderLimits::MaxPointLights);
+    }
+}
 
 static inline void SafeCopyPath(char* dest, size_t destSize, const std::string& src)
 {
@@ -140,9 +149,50 @@ Renderer::Renderer(Camera& cam, InputManager& input, Window& win, Scene& scene)
 
 Renderer::~Renderer()
 {
-    if (glfwGetCurrentContext())
+    shutdown();
+}
+
+void Renderer::shutdown()
+{
+    if (glfwGetCurrentContext()) releaseEnvironmentMaps(scene.GetEnvironment());
+
+    pointShadowFramebuffers.clear();
+    pingpongFrameBuffer[0].reset();
+    pingpongFrameBuffer[1].reset();
+    framebuffers.clear();
+
+    screenQuad.reset();
+    plane.reset();
+    cube.reset();
+
+    modelShader.reset();
+    lightShader.reset();
+    sceneFramebufferShader.reset();
+    skyboxShader.reset();
+    dirShadowShader.reset();
+    pointShadowShader.reset();
+    bloomBlurShader.reset();
+    gBufferShader.reset();
+    lightPassShader.reset();
+    debugShader.reset();
+    gbufferDebugShader.reset();
+    backgroundShader.reset();
+    irradianceShader.reset();
+    prefilterShader.reset();
+    brdfShader.reset();
+}
+
+void Renderer::syncPointShadowFramebuffers(std::size_t count)
+{
+    count = std::min(count, RenderLimits::MaxPointLights);
+    pointShadowFramebuffers.resize(count);
+    for (auto& framebuffer : pointShadowFramebuffers)
     {
-        releaseEnvironmentMaps(scene.GetEnvironment());
+        if (!framebuffer)
+        {
+            framebuffer = std::make_unique<FrameBuffer>(
+                SHADOW_Size, SHADOW_Size, false, false, false, true, false);
+        }
     }
 }
 
@@ -192,22 +242,13 @@ void Renderer::init()
         hasNormal.push_back(normal);
     }
 
-    for (int i = 0; i < scene.GetPointLights().size(); i++)
-    {
-        pointShadowFramebuffers.push_back(
-            std::make_unique<FrameBuffer>(SHADOW_Size, SHADOW_Size,
-                false, false,
-                false,  // useDepthMap2D
-                true,   // useDepthCube
-                false)  // useHdr
-        );
-    }
+    syncPointShadowFramebuffers(PointLightCount(scene));
 
     modelShader->use();
     modelShader->setUniform("depthMap", 0);
-    for (int i = 0; i < 4; ++i)
+    for (std::size_t i = 0; i < RenderLimits::MaxPointLights; ++i)
     {
-        modelShader->setUniform("shadowMap[" + std::to_string(i) + "]", 1 + i);
+        modelShader->setUniform("shadowMap[" + std::to_string(i) + "]", static_cast<int>(1 + i));
     }
     modelShader->setUniform("diffuse", 5);
     modelShader->setUniform("specular", 6);
@@ -218,7 +259,7 @@ void Renderer::init()
     modelShader->setUniform("prefilterMap", 12);
     modelShader->setUniform("brdfLUT", 13);
 
-    for (int i = 0; i < scene.GetPointLights().size(); i++)
+    for (std::size_t i = 0; i < RenderLimits::MaxPointLights; ++i)
     {
         std::string base = "pointLight[" + std::to_string(i) + "]";
 
@@ -242,9 +283,9 @@ void Renderer::init()
     lightPassShader->setUniform("gGeoNormal", 4);
     lightPassShader->setUniform("gDepth", 5);
     lightPassShader->setUniform("depthMap", 6);
-    for (int i = 0; i < 4; ++i)
+    for (std::size_t i = 0; i < RenderLimits::MaxPointLights; ++i)
     {
-        lightPassShader->setUniform("shadowMap[" + std::to_string(i) + "]", 7 + i);
+        lightPassShader->setUniform("shadowMap[" + std::to_string(i) + "]", static_cast<int>(7 + i));
     }
 
     // IBL samplers
@@ -252,7 +293,7 @@ void Renderer::init()
     lightPassShader->setUniform("prefilterMap", 12);
     lightPassShader->setUniform("brdfLUT", 13);
 
-    for (int i = 0; i < scene.GetPointLights().size(); i++)
+    for (std::size_t i = 0; i < RenderLimits::MaxPointLights; ++i)
     {
         std::string base = "pointLight[" + std::to_string(i) + "]";
 
@@ -470,16 +511,11 @@ void Renderer::generateIBLMaps(Environment& env)
 void Renderer::render(Scene& scene)
 {
     prepareEnvironment(scene.GetEnvironment());
+    syncPointShadowFramebuffers(PointLightCount(scene));
     
     LightSpaceMatrix = scene.GetDirLight().getOrthoMatrix() * scene.GetDirLight().getOrthoViewMatrix();
 
-    if (useShadows)
-        shadowPass(scene);
-    else
-    {
-        parallelShadows = false;
-        pointShadows = false;
-    }
+    if (useShadows) shadowPass(scene);
 
     FrameBuffer& hdrFrameBuffer = *framebuffers[0];
     FrameBuffer& lightPassFrameBuffer = *framebuffers[3];
@@ -518,7 +554,13 @@ void Renderer::shadowPass(Scene& scene)
 
     glViewport(0, 0, SHADOW_Size, SHADOW_Size);
 
-    if (input.isParallelLightOn())
+    const bool directionalLightEnabled = input.isParallelLightOn() && scene.GetDirLight().lightOn();
+    const bool pointLightEnabled = input.isPointLightOn();
+    const bool directionalShadowEnabled = useShadows && directionalLightEnabled;
+    const bool pointShadowEnabled = useShadows && pointLightEnabled;
+    const std::size_t pointLightCount = PointLightCount(scene);
+
+    if (directionalShadowEnabled)
     {
         glBindFramebuffer(GL_FRAMEBUFFER, parallelShadowFrameBuffer.getFBO());
         glClear(GL_DEPTH_BUFFER_BIT);
@@ -537,12 +579,14 @@ void Renderer::shadowPass(Scene& scene)
         glCullFace(GL_BACK);
     }
 
-    if (input.isPointLightOn())
+    if (pointShadowEnabled)
     {
         pointShadowShader->use();
 
-        for (int i = 0; i < scene.GetPointLights().size(); i++)
+        for (std::size_t i = 0; i < pointLightCount; ++i)
         {
+            if (!scene.GetPointLights()[i].lightOn()) continue;
+
             FrameBuffer& fbo = *pointShadowFramebuffers[i];
 
             glBindFramebuffer(GL_FRAMEBUFFER, fbo.getFBO());
@@ -578,6 +622,11 @@ void Renderer::forwardPass(Scene& scene)
     glm::mat4 model(1.0f);
 
     FrameBuffer& parallelShadowFrameBuffer = *framebuffers[1];
+    const bool directionalLightEnabled = input.isParallelLightOn() && scene.GetDirLight().lightOn();
+    const bool pointLightEnabled = input.isPointLightOn();
+    const bool directionalShadowEnabled = useShadows && directionalLightEnabled;
+    const bool pointShadowEnabled = useShadows && pointLightEnabled;
+    const std::size_t pointLightCount = PointLightCount(scene);
 
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffers[0]->getFBO());
     glEnable(GL_DEPTH_TEST);
@@ -603,54 +652,46 @@ void Renderer::forwardPass(Scene& scene)
     modelShader->setUniform("parallelLight.color", scene.GetDirLight().getColor());
     modelShader->setUniform("parallelLight.direction", scene.GetDirLight().getLightDir());
     modelShader->setUniform("parallelLight.intensity", scene.GetDirLight().getIntensity());
-    modelShader->setUniform("parallelLight.enabled", input.isParallelLightOn());
+    modelShader->setUniform("parallelLight.enabled", directionalLightEnabled);
     modelShader->setUniform("lightSpaceMatrix", LightSpaceMatrix);
-    modelShader->setUniform("parallelShadows", parallelShadows);
-    modelShader->setUniform("pointShadows", pointShadows);
+    modelShader->setUniform("parallelShadows", directionalShadowEnabled);
+    modelShader->setUniform("pointShadows", pointShadowEnabled);
+    modelShader->setUniform("pointLightCount", static_cast<int>(pointLightCount));
 
-    if (useShadows)
+    if (directionalShadowEnabled)
     {
-        if (input.isParallelLightOn())
-        {
-            pointShadows = false;
-            parallelShadows = true;
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, parallelShadowFrameBuffer.getDepth2D());
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, parallelShadowFrameBuffer.getDepth2D());
 
-            modelShader->setUniform("depthMap", 0);
-        }
-        else pointShadows = true;
+        modelShader->setUniform("depthMap", 0);
     }
 
     //point light
 
-    for (int i = 0; i < scene.GetPointLights().size(); i++)
+    for (std::size_t i = 0; i < pointLightCount; ++i)
     {
         std::string base = "pointLight[" + std::to_string(i) + "]";
 
         modelShader->setUniform(base + ".color", scene.GetPointLights()[i].getColor());
         modelShader->setUniform(base + ".position", scene.GetPointLights()[i].getLightPos());
         modelShader->setUniform(base + ".intensity", scene.GetPointLights()[i].getIntensity());
-        modelShader->setUniform(base + ".enabled", scene.GetPointLights()[i].lightOn() && input.isPointLightOn());
-        modelShader->setUniform("far_plane", scene.GetPointLights()[i].getFar());
+        modelShader->setUniform(base + ".enabled", scene.GetPointLights()[i].lightOn() && pointLightEnabled);
+        modelShader->setUniform(base + ".farPlane", scene.GetPointLights()[i].getFar());
 
-        if (input.isPointLightOn() && useShadows)
+        if (pointShadowEnabled)
         {
             glActiveTexture(GL_TEXTURE1 + i);
             glBindTexture(GL_TEXTURE_CUBE_MAP, pointShadowFramebuffers[i]->getDepthCube());
 
-            modelShader->setUniform("shadowMap[" + std::to_string(i) + "]", 1 + i);
+            modelShader->setUniform("shadowMap[" + std::to_string(i) + "]", static_cast<int>(1 + i));
         }
     }
 
     if (drawPlane)
     {
-        drawMesh(*plane, *modelShader);
         modelShader->setUniform("model", model);
-        modelShader->setUniform("hasNormalMap", static_cast<bool>(hasNormal[0]));
-        modelShader->setUniform("hasHeightMap", hasHeight);
         modelShader->setUniform("height_scale", height_scale);
-        modelShader->setUniform("hasARMMap", false);
+        drawMesh(*plane, *modelShader, static_cast<bool>(hasNormal[0]), hasHeight, false);
         glDisable(GL_CULL_FACE);
         plane->draw();
         glEnable(GL_CULL_FACE);
@@ -666,16 +707,13 @@ void Renderer::forwardPass(Scene& scene)
 
     unsigned int index = 0;
     for (const auto& obj : scene.GetObjects()) {
-        drawModel(*obj.model, *modelShader);
         modelShader->setUniform("aoBias", aoBias[index]);
         modelShader->setUniform("roughnessBias", roughnessBias[index]);
         modelShader->setUniform("metallicBias", metallicBias[index]);
         index++;
-        modelShader->setUniform("hasNormalMap", static_cast<bool>(hasNormal[index]));
-        modelShader->setUniform("hasHeightMap", false);
-        modelShader->setUniform("height_scale", false);
-        modelShader->setUniform("hasARMMap", true);
-        renderModel(obj.transform, *obj.model, *modelShader);
+        modelShader->setUniform("height_scale", 0.0f);
+        modelShader->setUniform("model", obj.transform.getModelMatrix());
+        drawModel(*obj.model, *modelShader, static_cast<bool>(hasNormal[index]), false, true);
     }
 
     if (drawLights)
@@ -687,7 +725,7 @@ void Renderer::forwardPass(Scene& scene)
         lightShader->setUniform("view", camera.getViewMatrix());
         lightShader->setUniform("projection", camera.getProjectionMatrix());
 
-        for (int i = 0; i < scene.GetPointLights().size(); i++)
+        for (std::size_t i = 0; i < pointLightCount; ++i)
         {
             glm::mat4 lightModel(1.0f);
             lightModel = glm::translate(model, scene.GetPointLights()[i].getLightPos());
@@ -807,10 +845,8 @@ void Renderer::geometryPass(Scene& scene)
 
     if (drawPlane)
     {
-        drawMesh(*plane, *gBufferShader);
         gBufferShader->setUniform("model", model);
-        gBufferShader->setUniform("hasNormalMap", static_cast<bool>(hasNormal[0]));
-        gBufferShader->setUniform("hasARMMap", false);
+        drawMesh(*plane, *gBufferShader, static_cast<bool>(hasNormal[0]), false, false);
         glDisable(GL_CULL_FACE);
         plane->draw();
         glEnable(GL_CULL_FACE);
@@ -818,14 +854,12 @@ void Renderer::geometryPass(Scene& scene)
 
     unsigned int index = 0;
     for (const auto& obj : scene.GetObjects()) {
-        drawModel(*obj.model, *gBufferShader);
         gBufferShader->setUniform("aoBias", aoBias[index]);
         gBufferShader->setUniform("roughnessBias", roughnessBias[index]);
         gBufferShader->setUniform("metallicBias", metallicBias[index]);
         index++;
-        gBufferShader->setUniform("hasNormalMap", static_cast<bool>(hasNormal[index]));
-        gBufferShader->setUniform("hasARMMap", true);
-        renderModel(obj.transform, *obj.model, *gBufferShader);
+        gBufferShader->setUniform("model", obj.transform.getModelMatrix());
+        drawModel(*obj.model, *gBufferShader, static_cast<bool>(hasNormal[index]), false, true);
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -838,6 +872,11 @@ void Renderer::lightPass(Scene& scene)
     FrameBuffer& parallelShadowFrameBuffer = *framebuffers[1];
     FrameBuffer& gFrameBuffer = *framebuffers[2];
     FrameBuffer& lightPassFrameBuffer = *framebuffers[3];
+    const bool directionalLightEnabled = input.isParallelLightOn() && scene.GetDirLight().lightOn();
+    const bool pointLightEnabled = input.isPointLightOn();
+    const bool directionalShadowEnabled = useShadows && directionalLightEnabled;
+    const bool pointShadowEnabled = useShadows && pointLightEnabled;
+    const std::size_t pointLightCount = PointLightCount(scene);
 
     GLuint gBuffer = gFrameBuffer.getFBO();
     GLuint gPosition = gFrameBuffer.getColor(0);
@@ -878,43 +917,38 @@ void Renderer::lightPass(Scene& scene)
     lightPassShader->setUniform("parallelLight.color", scene.GetDirLight().getColor());
     lightPassShader->setUniform("parallelLight.direction", scene.GetDirLight().getLightDir());
     lightPassShader->setUniform("parallelLight.intensity", scene.GetDirLight().getIntensity());
-    lightPassShader->setUniform("parallelLight.enabled", input.isParallelLightOn());
+    lightPassShader->setUniform("parallelLight.enabled", directionalLightEnabled);
     lightPassShader->setUniform("lightSpaceMatrix", LightSpaceMatrix);
-    lightPassShader->setUniform("parallelShadows", parallelShadows);
-    lightPassShader->setUniform("pointShadows", pointShadows);
+    lightPassShader->setUniform("parallelShadows", directionalShadowEnabled);
+    lightPassShader->setUniform("pointShadows", pointShadowEnabled);
+    lightPassShader->setUniform("pointLightCount", static_cast<int>(pointLightCount));
 
-    if (useShadows)
+    if (directionalShadowEnabled)
     {
-        if (input.isParallelLightOn())
-        {
-            pointShadows = false;
-            parallelShadows = true;
-            glActiveTexture(GL_TEXTURE6);
-            glBindTexture(GL_TEXTURE_2D, parallelShadowFrameBuffer.getDepth2D());
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, parallelShadowFrameBuffer.getDepth2D());
 
-            lightPassShader->setUniform("depthMap", 6);
-        }
-        else pointShadows = true;
+        lightPassShader->setUniform("depthMap", 6);
     }
 
     //point light
 
-    for (int i = 0; i < scene.GetPointLights().size(); i++)
+    for (std::size_t i = 0; i < pointLightCount; ++i)
     {
         std::string base = "pointLight[" + std::to_string(i) + "]";
 
         lightPassShader->setUniform(base + ".color", scene.GetPointLights()[i].getColor());
         lightPassShader->setUniform(base + ".position", scene.GetPointLights()[i].getLightPos());
         lightPassShader->setUniform(base + ".intensity", scene.GetPointLights()[i].getIntensity());
-        lightPassShader->setUniform(base + ".enabled", scene.GetPointLights()[i].lightOn() && input.isPointLightOn());
-        lightPassShader->setUniform("far_plane", scene.GetPointLights()[i].getFar());
+        lightPassShader->setUniform(base + ".enabled", scene.GetPointLights()[i].lightOn() && pointLightEnabled);
+        lightPassShader->setUniform(base + ".farPlane", scene.GetPointLights()[i].getFar());
 
-        if (input.isPointLightOn() && useShadows)
+        if (pointShadowEnabled)
         {
             glActiveTexture(GL_TEXTURE7 + i);
             glBindTexture(GL_TEXTURE_CUBE_MAP, pointShadowFramebuffers[i]->getDepthCube());
 
-            lightPassShader->setUniform("shadowMap[" + std::to_string(i) + "]", 7 + i);
+            lightPassShader->setUniform("shadowMap[" + std::to_string(i) + "]", static_cast<int>(7 + i));
         }
     }
 
@@ -949,7 +983,7 @@ void Renderer::lightPass(Scene& scene)
         lightShader->setUniform("view", camera.getViewMatrix());
         lightShader->setUniform("projection", camera.getProjectionMatrix());
 
-        for (int i = 0; i < scene.GetPointLights().size(); i++)
+        for (std::size_t i = 0; i < pointLightCount; ++i)
         {
             glm::mat4 lightModel(1.0f);
             lightModel = glm::translate(model, scene.GetPointLights()[i].getLightPos());
@@ -1017,8 +1051,18 @@ void Renderer::lightPass(Scene& scene)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void Renderer::drawMesh(const Mesh& mesh, Shader& shader) const
+void Renderer::drawMesh(const Mesh& mesh, Shader& shader, bool useNormalMap, bool useHeightMap, bool useARMMap) const
 {
+    for (GLuint slot = 5; slot <= 9; ++slot)
+    {
+        glActiveTexture(GL_TEXTURE0 + slot);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    bool hasNormalTexture = false;
+    bool hasHeightTexture = false;
+    bool hasARMTexture = false;
+
     for (const auto& tex : mesh.getTexture())
     {
         GLuint slot = 0;
@@ -1037,14 +1081,17 @@ void Renderer::drawMesh(const Mesh& mesh, Shader& shader) const
             case TextureType::Normal:
                 uniformName = "normal";
                 slot = 7;
+                hasNormalTexture = true;
                 break;
             case TextureType::Height:
                 uniformName = "height";
                 slot = 8;
+                hasHeightTexture = true;
                 break;
             case TextureType::ARM:
                 uniformName = "arm";
                 slot = 9;
+                hasARMTexture = true;
                 break;
             default:
                 continue;
@@ -1053,13 +1100,21 @@ void Renderer::drawMesh(const Mesh& mesh, Shader& shader) const
         tex->bind(slot);
         shader.setUniform(uniformName, static_cast<int>(slot));
     }
+
+    shader.setUniform("hasNormalMap", useNormalMap && hasNormalTexture);
+    shader.setUniform("hasHeightMap", useHeightMap && hasHeightTexture);
+    shader.setUniform("hasARMMap", useARMMap && hasARMTexture);
 }
 
-void Renderer::drawModel(const Model& model, Shader& shader) const
+void Renderer::drawModel(const Model& model, Shader& shader, bool useNormalMap, bool useHeightMap, bool useARMMap) const
 {
-    for (auto& mesh : model.meshes)
+    for (const auto& mesh : model.meshes)
     {
-        drawMesh(*mesh, shader);
+        drawMesh(*mesh, shader, useNormalMap, useHeightMap, useARMMap);
+        if (model.instancingEnabled)
+            mesh->drawInstanced(static_cast<int>(model.instanceCount));
+        else
+            mesh->draw();
     }
 }
 
@@ -1228,9 +1283,9 @@ void Renderer::onImGuiRender()
     ImGui::Begin("Light Control");
 
     ImGui::Text("Point Lights");
-    for (int i = 0; i < scene.GetPointLights().size(); ++i)
+    for (std::size_t i = 0; i < PointLightCount(scene); ++i)
     {
-        scene.GetPointLights()[i].pointOnImGuiRender(i);
+        scene.GetPointLight(i).pointOnImGuiRender(static_cast<int>(i));
     }
 
     ImGui::Text("Dir Lights");
@@ -1408,9 +1463,9 @@ void Renderer::onImGuiRender()
             if (name == "model" && modelShader) {
                 modelShader->use();
                 modelShader->setUniform("depthMap", 0);
-                for (int i = 0; i < 4; ++i)
+                for (std::size_t i = 0; i < RenderLimits::MaxPointLights; ++i)
                 {
-                    modelShader->setUniform("shadowMap[" + std::to_string(i) + "]", 1 + i);
+                    modelShader->setUniform("shadowMap[" + std::to_string(i) + "]", static_cast<int>(1 + i));
                 }
                 modelShader->setUniform("diffuse", 5);
                 modelShader->setUniform("specular", 6);
@@ -1421,7 +1476,7 @@ void Renderer::onImGuiRender()
                 modelShader->setUniform("prefilterMap", 12);
                 modelShader->setUniform("brdfLUT", 13);
                 // point light constants previously set in init
-                for (int i = 0; i < static_cast<int>(scene.GetPointLights().size()); ++i) {
+                for (std::size_t i = 0; i < RenderLimits::MaxPointLights; ++i) {
                     std::string base = "pointLight[" + std::to_string(i) + "]";
                     modelShader->setUniform(base + ".constant", 1.0f);
                     modelShader->setUniform(base + ".linear", 0.09f);
@@ -1445,14 +1500,14 @@ void Renderer::onImGuiRender()
                 lightPassShader->setUniform("gGeoNormal", 4);
                 lightPassShader->setUniform("gDepth", 5);
                 lightPassShader->setUniform("depthMap", 6);
-                for (int i = 0; i < 4; ++i)
+                for (std::size_t i = 0; i < RenderLimits::MaxPointLights; ++i)
                 {
-                    lightPassShader->setUniform("shadowMap[" + std::to_string(i) + "]", 7 + i);
+                    lightPassShader->setUniform("shadowMap[" + std::to_string(i) + "]", static_cast<int>(7 + i));
                 }
                 lightPassShader->setUniform("irradianceMap", 11);
                 lightPassShader->setUniform("prefilterMap", 12);
                 lightPassShader->setUniform("brdfLUT", 13);
-                for (int i = 0; i < static_cast<int>(scene.GetPointLights().size()); ++i) {
+                for (std::size_t i = 0; i < RenderLimits::MaxPointLights; ++i) {
                     std::string base = "pointLight[" + std::to_string(i) + "]";
                     lightPassShader->setUniform(base + ".constant", 1.0f);
                     lightPassShader->setUniform(base + ".linear", 0.09f);

@@ -79,13 +79,14 @@ Texture::Texture(const std::string& path, TextureType typeName)
 	bool uploaded = false;
 
 	// load from memory
+	stbi_set_flip_vertically_on_load(typeName == HDR);
 	if (typeName == HDR) {
-		stbi_set_flip_vertically_on_load(true);
 		data = stbi_loadf_from_memory(buffer.data(), (int)size, &width, &height, &nrChannels, 0);
 	}
 	else {
 		data = stbi_load_from_memory(buffer.data(), (int)size, &width, &height, &nrChannels, 0);
 	}
+	stbi_set_flip_vertically_on_load(false);
 
 	/*unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 0);*/
 
