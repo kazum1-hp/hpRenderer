@@ -123,6 +123,9 @@ Run the executable from:
 build/Debug/hpRenderer.exe
 ```
 
+For renderer-refactor verification, see the
+[automated checks and manual smoke matrix](docs/refactor_baseline.md).
+
 ---
 
 ##  Project Structure

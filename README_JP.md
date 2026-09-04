@@ -118,6 +118,9 @@ cmake --build .
 build/Debug/hpRenderer.exe
 ```
 
+レンダラーのリファクタリング時は、
+[自動チェックと手動スモークテスト](docs/refactor_baseline.md)も参照してください。
+
 ---
 
 ## ディレクトリ構成

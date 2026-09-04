@@ -4,6 +4,8 @@ project(hpRenderer)
 
 set(CMAKE_CXX_STANDARD 17)
 
+include(CTest)
+
 # ================= GLFW =================
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -103,3 +105,28 @@ target_link_libraries(hpRenderer
     assimp
     opengl32
 )
+
+# ================= TESTS =================
+# These tests deliberately avoid creating an OpenGL context. They protect the
+# scene-level behavior that the renderer refactor will move between modules.
+if(BUILD_TESTING)
+    add_executable(hpRenderer_scene_tests
+        tests/SceneBehaviorTests.cpp
+        src/Light.cpp
+    )
+
+    target_include_directories(hpRenderer_scene_tests PRIVATE
+        include
+        third_party/glad/include
+        third_party/glfw/include
+        third_party/glm
+        third_party/imgui
+    )
+
+    target_link_libraries(hpRenderer_scene_tests PRIVATE
+        imgui
+        assimp
+    )
+
+    add_test(NAME scene_behavior COMMAND hpRenderer_scene_tests)
+endif()
