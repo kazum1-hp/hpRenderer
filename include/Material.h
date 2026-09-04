@@ -1,6 +1,7 @@
 #pragma once
 #include "glm/glm.hpp"
-#include <string.h>
+#include <memory>
+#include <string>
 
 class Material {
 private:
@@ -34,5 +35,14 @@ public:
 	void setDiffuse(glm::vec3 dif) { diffuse = dif; }
 	void setSpecular(glm::vec3 spec) { specular = spec; }
 	void setShininess(float shin) { shininess = shin; }
+};
+
+struct MaterialInstance
+{
+    std::shared_ptr<Material> baseMaterial;
+    float aoBias = 0.0f;
+    float roughnessBias = 0.0f;
+    float metallicBias = 0.0f;
+    bool useNormalMap = false;
 };
 

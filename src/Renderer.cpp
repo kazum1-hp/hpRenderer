@@ -122,12 +122,13 @@ Renderer::Renderer(Camera& cam, InputManager& input, Window& win, Scene& scene)
         return;
     }
 
-    framebufferWidth = window.getWidth();
-    framebufferHeight = window.getHeight();
-    framebuffers.push_back(std::make_unique<FrameBuffer>(window, /*useDepth*/true, /*useMs*/false, /*useDepthMap2D*/false, /*useDepthCube*/false, /*useHdr*/useHdr, 2));
+    renderExtent.width = static_cast<std::uint32_t>(window.getWidth());
+    renderExtent.height = static_cast<std::uint32_t>(window.getHeight());
+    renderOutput.extent = renderExtent;
+    framebuffers.push_back(std::make_unique<FrameBuffer>(window, /*useDepth*/true, /*useMs*/false, /*useDepthMap2D*/false, /*useDepthCube*/false, /*useHdr*/settings.postProcess.hdr, 2));
     framebuffers.push_back(std::make_unique<FrameBuffer>(SHADOW_Size, SHADOW_Size, false, false, true, false, false));
     framebuffers.push_back(std::make_unique<FrameBuffer>(window, /*useDepth*/false, /*useMs*/false, /*useDepthMap2D*/false, /*useDepthCube*/false, /*useHdr*/true, 5, /*useGbuffer*/true));
-    framebuffers.push_back(std::make_unique<FrameBuffer>(window, /*useDepth*/true, /*useMs*/false, /*useDepthMap2D*/false, /*useDepthCube*/false, /*useHdr*/useHdr, 2));
+    framebuffers.push_back(std::make_unique<FrameBuffer>(window, /*useDepth*/true, /*useMs*/false, /*useDepthMap2D*/false, /*useDepthCube*/false, /*useHdr*/settings.postProcess.hdr, 2));
     framebuffers.push_back(std::make_unique<FrameBuffer>(window, /*useDepth*/true, /*useMs*/false, /*useDepthMap2D*/false, /*useDepthCube*/false, /*useHdr*/false));
 
     pingpongFrameBuffer[0] = std::make_unique<FrameBuffer>(window, false, false, false, false, true);
@@ -229,18 +230,6 @@ void Renderer::init()
     screenQuad = res.GetScreenQuad();
     plane = res.GetPlane();
     cube = res.GetCube();
-
-    bool normal = false;
-    // plane normal
-    hasNormal.push_back(normal);
-    for (int i = 0; i < scene.GetObjects().size(); i++)
-    {
-        float bias = 0.0f;
-        aoBias.push_back(bias);
-        roughnessBias.push_back(bias);
-        metallicBias.push_back(bias);
-        hasNormal.push_back(normal);
-    }
 
     syncPointShadowFramebuffers(PointLightCount(scene));
 
@@ -505,7 +494,7 @@ void Renderer::generateIBLMaps(Environment& env)
     else
         glDisable(GL_CULL_FACE);
 
-    glViewport(0, 0, framebufferWidth, framebufferHeight);
+    glViewport(0, 0, renderExtent.width, renderExtent.height);
 }
 
 void Renderer::render(Scene& scene)
@@ -515,33 +504,33 @@ void Renderer::render(Scene& scene)
     
     LightSpaceMatrix = scene.GetDirLight().getOrthoMatrix() * scene.GetDirLight().getOrthoViewMatrix();
 
-    if (useShadows) shadowPass(scene);
+    if (settings.shadows) shadowPass(scene);
 
     FrameBuffer& hdrFrameBuffer = *framebuffers[0];
     FrameBuffer& lightPassFrameBuffer = *framebuffers[3];
     FrameBuffer& postProcessFrameBuffer = *framebuffers[4];
 
-    if (!useDeferred)
-    {        
-        if (usePostProcess)
+    if (!settings.deferred)
+    {
+        if (settings.postProcess.enabled)
         {
             forwardPass(scene);
             postProcessPass(hdrFrameBuffer);
-            finalTexture = postProcessFrameBuffer.getColor();
+            renderOutput.colorTexture = postProcessFrameBuffer.getColor();
         }
 
         else
         {
             forwardPass(scene);
-            finalTexture = hdrFrameBuffer.getColor();
+            renderOutput.colorTexture = hdrFrameBuffer.getColor();
         }
     }
     else
     {
         deferredPass(scene);
-        usePostProcess = true;
+        settings.postProcess.enabled = true;
         postProcessPass(lightPassFrameBuffer);
-        finalTexture = postProcessFrameBuffer.getColor();
+        renderOutput.colorTexture = postProcessFrameBuffer.getColor();
     }
 }
 
@@ -556,8 +545,8 @@ void Renderer::shadowPass(Scene& scene)
 
     const bool directionalLightEnabled = input.isParallelLightOn() && scene.GetDirLight().lightOn();
     const bool pointLightEnabled = input.isPointLightOn();
-    const bool directionalShadowEnabled = useShadows && directionalLightEnabled;
-    const bool pointShadowEnabled = useShadows && pointLightEnabled;
+    const bool directionalShadowEnabled = settings.shadows && directionalLightEnabled;
+    const bool pointShadowEnabled = settings.shadows && pointLightEnabled;
     const std::size_t pointLightCount = PointLightCount(scene);
 
     if (directionalShadowEnabled)
@@ -614,7 +603,7 @@ void Renderer::shadowPass(Scene& scene)
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    glViewport(0, 0, framebufferWidth, framebufferHeight);
+    glViewport(0, 0, renderExtent.width, renderExtent.height);
 }
 
 void Renderer::forwardPass(Scene& scene)
@@ -624,19 +613,19 @@ void Renderer::forwardPass(Scene& scene)
     FrameBuffer& parallelShadowFrameBuffer = *framebuffers[1];
     const bool directionalLightEnabled = input.isParallelLightOn() && scene.GetDirLight().lightOn();
     const bool pointLightEnabled = input.isPointLightOn();
-    const bool directionalShadowEnabled = useShadows && directionalLightEnabled;
-    const bool pointShadowEnabled = useShadows && pointLightEnabled;
+    const bool directionalShadowEnabled = settings.shadows && directionalLightEnabled;
+    const bool pointShadowEnabled = settings.shadows && pointLightEnabled;
     const std::size_t pointLightCount = PointLightCount(scene);
 
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffers[0]->getFBO());
     glEnable(GL_DEPTH_TEST);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glViewport(0, 0, framebufferWidth, framebufferHeight); 
+    glViewport(0, 0, renderExtent.width, renderExtent.height);
     // object
     modelShader->use();
 
     modelShader->setUniform("time", static_cast<float>(glfwGetTime()));
-    modelShader->setUniform("usePost", usePostProcess);
+    modelShader->setUniform("usePost", settings.postProcess.enabled);
 
     // transform matrix
     modelShader->setUniform("view", camera.getViewMatrix());
@@ -645,7 +634,7 @@ void Renderer::forwardPass(Scene& scene)
 
     // light 
     //modelShader->setUniform("useBlinnPhong", useBlinnPhong);
-    modelShader->setUniform("useQuadratic", useQuadratic);
+    modelShader->setUniform("useQuadratic", settings.quadraticAttenuation);
     //modelShader->setUniform("modelLight", modelLight);
 
     // paralleLight
@@ -687,11 +676,11 @@ void Renderer::forwardPass(Scene& scene)
         }
     }
 
-    if (drawPlane)
+    if (settings.groundPlane.visible)
     {
         modelShader->setUniform("model", model);
-        modelShader->setUniform("height_scale", height_scale);
-        drawMesh(*plane, *modelShader, static_cast<bool>(hasNormal[0]), hasHeight, false);
+        modelShader->setUniform("height_scale", settings.groundPlane.heightScale);
+        drawMesh(*plane, *modelShader, settings.groundPlane.useNormalMap, settings.groundPlane.useHeightMap, false);
         glDisable(GL_CULL_FACE);
         plane->draw();
         glEnable(GL_CULL_FACE);
@@ -705,18 +694,16 @@ void Renderer::forwardPass(Scene& scene)
     glActiveTexture(GL_TEXTURE13);
     glBindTexture(GL_TEXTURE_2D, env.maps.brdfLUT);
 
-    unsigned int index = 0;
     for (const auto& obj : scene.GetObjects()) {
-        modelShader->setUniform("aoBias", aoBias[index]);
-        modelShader->setUniform("roughnessBias", roughnessBias[index]);
-        modelShader->setUniform("metallicBias", metallicBias[index]);
-        index++;
+        modelShader->setUniform("aoBias", obj.material.aoBias);
+        modelShader->setUniform("roughnessBias", obj.material.roughnessBias);
+        modelShader->setUniform("metallicBias", obj.material.metallicBias);
         modelShader->setUniform("height_scale", 0.0f);
         modelShader->setUniform("model", obj.transform.getModelMatrix());
-        drawModel(*obj.model, *modelShader, static_cast<bool>(hasNormal[index]), false, true);
+        drawModel(*obj.model, *modelShader, obj.material.useNormalMap, false, true);
     }
 
-    if (drawLights)
+    if (settings.drawLights)
     {
         // draw cube lights
         lightShader->use();
@@ -745,7 +732,7 @@ void Renderer::forwardPass(Scene& scene)
     backgroundShader->use();
     backgroundShader->setUniform("view", camera.getViewMatrix());
     backgroundShader->setUniform("projection", camera.getProjectionMatrix());
-    backgroundShader->setUniform("usePost", usePostProcess);
+    backgroundShader->setUniform("usePost", settings.postProcess.enabled);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, env.maps.envCubemap);
     cube->draw();
@@ -765,10 +752,10 @@ void Renderer::postProcessPass(const FrameBuffer& framebuffer)
     bool horizontal = true, first_iteration = true;
     unsigned int amount = 5;
 
-    if (useBloom)
-    {   
+    if (settings.postProcess.bloom)
+    {
         bloomBlurShader->use();
-        bloomBlurShader->setUniform("samplerDistance", samplerDistance);
+        bloomBlurShader->setUniform("samplerDistance", settings.postProcess.bloomSampleDistance);
 
         for (unsigned int i = 0; i < amount; i++)
         {
@@ -786,26 +773,26 @@ void Renderer::postProcessPass(const FrameBuffer& framebuffer)
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffers[4]->getFBO());
-    glViewport(0, 0, framebufferWidth, framebufferHeight);
+    glViewport(0, 0, renderExtent.width, renderExtent.height);
 
     sceneFramebufferShader->use();
 
-    sceneFramebufferShader->setUniform("effectMode", effectMode);
-    sceneFramebufferShader->setUniform("toneMappingMode", toneMappingMode);
-    sceneFramebufferShader->setUniform("offset", offset);
+    sceneFramebufferShader->setUniform("effectMode", settings.postProcess.effectMode);
+    sceneFramebufferShader->setUniform("toneMappingMode", settings.postProcess.toneMappingMode);
+    sceneFramebufferShader->setUniform("offset", settings.postProcess.kernelOffset);
     sceneFramebufferShader->setUniform("screenTexture", 0);
     sceneFramebufferShader->setUniform("blur", 1);
-    sceneFramebufferShader->setUniform("scanPos", scanPos);
-    sceneFramebufferShader->setUniform("useHdr", useHdr);
-    sceneFramebufferShader->setUniform("useBloom", useBloom);
-    sceneFramebufferShader->setUniform("exposure", exposure);
+    sceneFramebufferShader->setUniform("scanPos", settings.postProcess.scanPosition);
+    sceneFramebufferShader->setUniform("useHdr", settings.postProcess.hdr);
+    sceneFramebufferShader->setUniform("useBloom", settings.postProcess.bloom);
+    sceneFramebufferShader->setUniform("exposure", settings.postProcess.exposure);
     sceneFramebufferShader->setUniform("time", static_cast<float>(glfwGetTime()));
-    sceneFramebufferShader->setUniform("viewportWidth", static_cast<float>(framebufferWidth));
+    sceneFramebufferShader->setUniform("viewportWidth", static_cast<float>(renderExtent.width));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, framebuffer.getColor(0));
 
-    if (useBloom)
+    if (settings.postProcess.bloom)
     {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, pingpongFrameBuffer[!horizontal]->getColor());
@@ -843,23 +830,21 @@ void Renderer::geometryPass(Scene& scene)
     // PBR / ORM settings
    
 
-    if (drawPlane)
+    if (settings.groundPlane.visible)
     {
         gBufferShader->setUniform("model", model);
-        drawMesh(*plane, *gBufferShader, static_cast<bool>(hasNormal[0]), false, false);
+        drawMesh(*plane, *gBufferShader, settings.groundPlane.useNormalMap, false, false);
         glDisable(GL_CULL_FACE);
         plane->draw();
         glEnable(GL_CULL_FACE);
     }
 
-    unsigned int index = 0;
     for (const auto& obj : scene.GetObjects()) {
-        gBufferShader->setUniform("aoBias", aoBias[index]);
-        gBufferShader->setUniform("roughnessBias", roughnessBias[index]);
-        gBufferShader->setUniform("metallicBias", metallicBias[index]);
-        index++;
+        gBufferShader->setUniform("aoBias", obj.material.aoBias);
+        gBufferShader->setUniform("roughnessBias", obj.material.roughnessBias);
+        gBufferShader->setUniform("metallicBias", obj.material.metallicBias);
         gBufferShader->setUniform("model", obj.transform.getModelMatrix());
-        drawModel(*obj.model, *gBufferShader, static_cast<bool>(hasNormal[index]), false, true);
+        drawModel(*obj.model, *gBufferShader, obj.material.useNormalMap, false, true);
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -874,8 +859,8 @@ void Renderer::lightPass(Scene& scene)
     FrameBuffer& lightPassFrameBuffer = *framebuffers[3];
     const bool directionalLightEnabled = input.isParallelLightOn() && scene.GetDirLight().lightOn();
     const bool pointLightEnabled = input.isPointLightOn();
-    const bool directionalShadowEnabled = useShadows && directionalLightEnabled;
-    const bool pointShadowEnabled = useShadows && pointLightEnabled;
+    const bool directionalShadowEnabled = settings.shadows && directionalLightEnabled;
+    const bool pointShadowEnabled = settings.shadows && pointLightEnabled;
     const std::size_t pointLightCount = PointLightCount(scene);
 
     GLuint gBuffer = gFrameBuffer.getFBO();
@@ -910,7 +895,7 @@ void Renderer::lightPass(Scene& scene)
 
     // light 
     //lightPassShader->setUniform("useBlinnPhong", useBlinnPhong);
-    lightPassShader->setUniform("useQuadratic", useQuadratic);
+    lightPassShader->setUniform("useQuadratic", settings.quadraticAttenuation);
     //lightPassShader->setUniform("modelLight", modelLight);
 
     // paralleLight
@@ -967,15 +952,15 @@ void Renderer::lightPass(Scene& scene)
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, lightPassFrameBuffer.getFBO());
-    glBlitFramebuffer(0, 0, framebufferWidth, framebufferHeight,
-                      0, 0, framebufferWidth, framebufferHeight,
+    glBlitFramebuffer(0, 0, renderExtent.width, renderExtent.height,
+                      0, 0, renderExtent.width, renderExtent.height,
                       GL_DEPTH_BUFFER_BIT, GL_NEAREST);
     //glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, lightPassFrameBuffer.getFBO());
     //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     // lightCube draw
-    if (drawLights)
+    if (settings.drawLights)
     {
         lightShader->use();
 
@@ -1012,9 +997,9 @@ void Renderer::lightPass(Scene& scene)
 
     glDisable(GL_DEPTH_TEST);
 
-    if (drawDebug)
+    if (settings.drawGBufferDebug)
     {
-        int debugH = framebufferHeight / 4;
+        int debugH = renderExtent.height / 4;
         int debugW = debugH * static_cast<int>(camera.aspect);
 
         gbufferDebugShader->use();
@@ -1024,7 +1009,7 @@ void Renderer::lightPass(Scene& scene)
             {
                 glViewport(
                     0,                  // x
-                    framebufferHeight - (index + 1) * debugH,  // OpenGL origin is at the lower left.
+                    static_cast<int>(renderExtent.height) - (index + 1) * debugH,  // OpenGL origin is at the lower left.
                     debugW,
                     debugH
                 );
@@ -1045,7 +1030,7 @@ void Renderer::lightPass(Scene& scene)
         drawDebug(gDepth, 3);
     }
 
-    glViewport(0, 0, framebufferWidth, framebufferHeight);
+    glViewport(0, 0, renderExtent.width, renderExtent.height);
     glEnable(GL_DEPTH_TEST);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1143,8 +1128,9 @@ void Renderer::resizeFrameBuffer(unsigned int newWidth, unsigned int newHeight)
 
     camera.aspect = (float)newWidth / (float)newHeight;
 
-    framebufferWidth = newWidth;
-    framebufferHeight = newHeight;
+    renderExtent.width = newWidth;
+    renderExtent.height = newHeight;
+    renderOutput.extent = renderExtent;
 }
 
 void Renderer::refreshDebugLabels()
@@ -1295,30 +1281,30 @@ void Renderer::onImGuiRender()
 
     // --------------------- Post Processing --------------------------
     ImGui::Begin("Post Processing");
-    ImGui::Checkbox("usePost", &usePostProcess);
+    ImGui::Checkbox("usePost", &settings.postProcess.enabled);
 
-    if (usePostProcess)
+    if (settings.postProcess.enabled)
     {
-        ImGui::Checkbox("useHdr", &useHdr);
-        if (useHdr)
+        ImGui::Checkbox("useHdr", &settings.postProcess.hdr);
+        if (settings.postProcess.hdr)
         {
-            ImGui::Combo("ToneMapping Mode", &toneMappingMode, "reinhard\0simple exposure\0ACESFilm\0Hable\0\0");
-            ImGui::SliderFloat("Exposure", &exposure, 0.01f, 10.0f);
+            ImGui::Combo("ToneMapping Mode", &settings.postProcess.toneMappingMode, "reinhard\0simple exposure\0ACESFilm\0Hable\0\0");
+            ImGui::SliderFloat("Exposure", &settings.postProcess.exposure, 0.01f, 10.0f);
         }
 
-        if (drawLights)
+        if (settings.drawLights)
         {
-            ImGui::Checkbox("useBloom", &useBloom);
-            if (useBloom)
-                ImGui::SliderFloat("samplerDistance", &samplerDistance, 0.01f, 10.0f);
+            ImGui::Checkbox("useBloom", &settings.postProcess.bloom);
+            if (settings.postProcess.bloom)
+                ImGui::SliderFloat("samplerDistance", &settings.postProcess.bloomSampleDistance, 0.01f, 10.0f);
         }
 
-        ImGui::Combo("Effect Mode", &effectMode, "normal\0inversion\0grayscale\0sharpen\0blur\0\0");
-        if (effectMode == 3 || effectMode == 4)
+        ImGui::Combo("Effect Mode", &settings.postProcess.effectMode, "normal\0inversion\0grayscale\0sharpen\0blur\0\0");
+        if (settings.postProcess.effectMode == 3 || settings.postProcess.effectMode == 4)
         {
-            ImGui::SliderFloat("Offset", &offset, 100.0f, 1000.0f);
+            ImGui::SliderFloat("Offset", &settings.postProcess.kernelOffset, 100.0f, 1000.0f);
         }
-        ImGui::SliderFloat("Scan Pos", &scanPos, 0.0f, static_cast<float>(framebufferWidth));
+        ImGui::SliderFloat("Scan Pos", &settings.postProcess.scanPosition, 0.0f, static_cast<float>(renderExtent.width));
     }
 
     ImGui::End();
@@ -1327,27 +1313,6 @@ void Renderer::onImGuiRender()
     ImGui::Begin("Renderer Settings");
 
     static int selectedIndex = 0;
-    auto syncObjectUiState = [&]() {
-        const size_t objectCount = scene.GetObjects().size();
-
-        if (aoBias.size() != objectCount) aoBias.resize(objectCount, 0.0f);
-        if (roughnessBias.size() != objectCount) roughnessBias.resize(objectCount, 0.0f);
-        if (metallicBias.size() != objectCount) metallicBias.resize(objectCount, 0.0f);
-
-        const size_t normalCount = objectCount + 1; // index 0 is the plane, objects start at 1.
-        if (hasNormal.size() != normalCount) hasNormal.resize(normalCount, 0);
-    };
-
-    auto eraseObjectUiState = [&](int index) {
-        const size_t objectIndex = static_cast<size_t>(index);
-        if (objectIndex < aoBias.size()) aoBias.erase(aoBias.begin() + objectIndex);
-        if (objectIndex < roughnessBias.size()) roughnessBias.erase(roughnessBias.begin() + objectIndex);
-        if (objectIndex < metallicBias.size()) metallicBias.erase(metallicBias.begin() + objectIndex);
-
-        const size_t normalIndex = objectIndex + 1;
-        if (normalIndex < hasNormal.size()) hasNormal.erase(hasNormal.begin() + normalIndex);
-    };
-
     auto selectedObjectLabel = [&]() {
         const auto& objects = scene.GetObjects();
         if (objects.empty()) return std::string("No Object");
@@ -1360,8 +1325,6 @@ void Renderer::onImGuiRender()
 
         return "Object " + std::to_string(selectedIndex);
     };
-
-    syncObjectUiState();
 
     auto& objects = scene.GetObjects();
     if (objects.empty())
@@ -1402,51 +1365,43 @@ void Renderer::onImGuiRender()
 
         ImGui::PushID(selectedIndex);
 
-        ImGui::SliderFloat("aoBias", &aoBias[static_cast<size_t>(selectedIndex)], -1.0f, 1.0f);
-        ImGui::SliderFloat("roughnessBias", &roughnessBias[static_cast<size_t>(selectedIndex)], -1.0f, 1.0f);
-        ImGui::SliderFloat("metallicBias", &metallicBias[static_cast<size_t>(selectedIndex)], -1.0f, 1.0f);
-        objects[static_cast<size_t>(selectedIndex)].transform.onImGuiRender();
-        bool temp = hasNormal[static_cast<size_t>(selectedIndex) + 1];
-        if (ImGui::Checkbox("useNormal", &temp))
-        {
-            hasNormal[static_cast<size_t>(selectedIndex) + 1] = temp ? 1 : 0;
-        }
+        RenderObject& selectedObject = objects[static_cast<size_t>(selectedIndex)];
+        ImGui::SliderFloat("aoBias", &selectedObject.material.aoBias, -1.0f, 1.0f);
+        ImGui::SliderFloat("roughnessBias", &selectedObject.material.roughnessBias, -1.0f, 1.0f);
+        ImGui::SliderFloat("metallicBias", &selectedObject.material.metallicBias, -1.0f, 1.0f);
+        selectedObject.transform.onImGuiRender();
+        ImGui::Checkbox("useNormal", &selectedObject.material.useNormalMap);
 
         input.onImGuiRender();
 
         ImGui::PopID();
     }
 
-    ImGui::Checkbox("useShadow", &useShadows);
+    ImGui::Checkbox("useShadow", &settings.shadows);
     ImGui::SameLine();
-    ImGui::Checkbox("drawLights", &drawLights);
+    ImGui::Checkbox("drawLights", &settings.drawLights);
 
-    ImGui::Checkbox("drawPlane", &drawPlane);
+    ImGui::Checkbox("drawPlane", &settings.groundPlane.visible);
 
-    if (drawPlane)
+    if (settings.groundPlane.visible)
     {
         ImGui::SameLine();
-
-        bool planeNormal = hasNormal[0];
-        if (ImGui::Checkbox("useNormal", &planeNormal))
-        {
-            hasNormal[0] = planeNormal ? 1 : 0;
-        }
+        ImGui::Checkbox("useNormal", &settings.groundPlane.useNormalMap);
 
         ImGui::SameLine();
 
-        ImGui::Checkbox("useHeight", &hasHeight);
-        if (hasHeight)
+        ImGui::Checkbox("useHeight", &settings.groundPlane.useHeightMap);
+        if (settings.groundPlane.useHeightMap)
         {
-            ImGui::SliderFloat("height_scale", &height_scale, 0.0001f, 0.01f);
+            ImGui::SliderFloat("height_scale", &settings.groundPlane.heightScale, 0.0001f, 0.01f);
         }
     }
 
-    ImGui::Checkbox("useDeferred", &useDeferred);
-    if (useDeferred)
+    ImGui::Checkbox("useDeferred", &settings.deferred);
+    if (settings.deferred)
     {
         ImGui::SameLine();
-        ImGui::Checkbox("drawDebug", &drawDebug);
+        ImGui::Checkbox("drawDebug", &settings.drawGBufferDebug);
     }
 
     ImGui::End();
@@ -1578,7 +1533,6 @@ void Renderer::onImGuiRender()
         if (currentObjects.empty())
         {
             scene.AddObject(mdl);
-            syncObjectUiState();
             assetSelectedIndex = 0;
             hotReloadMsg = "Model added: " + path;
             return;
@@ -1597,7 +1551,6 @@ void Renderer::onImGuiRender()
         if (!mdl) return;
 
         scene.AddObject(mdl);
-        syncObjectUiState();
         assetSelectedIndex = static_cast<int>(scene.GetObjects().size()) - 1;
         hotReloadMsg = "Model added: " + path;
     };
@@ -1691,8 +1644,6 @@ void Renderer::onImGuiRender()
             const int deletedIndex = assetSelectedIndex;
             if (scene.RemoveObject(static_cast<size_t>(assetSelectedIndex)))
             {
-                eraseObjectUiState(deletedIndex);
-                syncObjectUiState();
                 if (assetSelectedIndex >= static_cast<int>(scene.GetObjects().size()))
                     assetSelectedIndex = static_cast<int>(scene.GetObjects().size()) - 1;
                 if (assetSelectedIndex < 0) assetSelectedIndex = 0;
@@ -1838,23 +1789,23 @@ void Renderer::onImGuiRender()
     unsigned int newHeight = (unsigned int)size.y;
 
     if (newWidth > 0 && newHeight > 0 &&
-        (newWidth != framebufferWidth || newHeight != framebufferHeight)
+        (newWidth != renderExtent.width || newHeight != renderExtent.height)
         && !ImGui::IsMouseDown(0))
     {
         resizeFrameBuffer(newWidth, newHeight);
     }
 
-    if (finalTexture != 0)
+    if (renderOutput.colorTexture != 0)
     {
         ImVec2 imagePos = ImGui::GetCursorScreenPos();
 
         ImGui::Image(
-            (ImTextureID)(intptr_t)finalTexture,
+            (ImTextureID)(intptr_t)renderOutput.colorTexture,
             size,
             ImVec2(0, 1),   // flip vertically
             ImVec2(1, 0)
         ); 
-        if (drawDebug && useDeferred)
+        if (settings.drawGBufferDebug && settings.deferred)
         {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
 

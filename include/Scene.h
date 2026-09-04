@@ -13,8 +13,7 @@
 struct RenderObject {
     std::shared_ptr<Model> model;
     Transform transform;
-    // If need to override the model's default material, add the Material here.
-    std::shared_ptr<Material> material;
+    MaterialInstance material;
 };
 
 struct EnvironmentAsset {
@@ -54,7 +53,7 @@ public:
         RenderObject obj;
         obj.model = model;
         obj.transform.setInitialTransform(pos, scale);
-        obj.material = mat;
+        obj.material.baseMaterial = mat;
         objects.push_back(obj);
     }
 

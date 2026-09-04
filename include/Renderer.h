@@ -10,6 +10,8 @@
 #include "Window.h"
 #include "Transform.h"
 #include "RenderLimits.h"
+#include "RenderSettings.h"
+#include "RenderTypes.h"
 #include "../third_party/imgui/imgui.h"
 #include "../third_party/imgui/imgui_internal.h"
 #include "../third_party/ImGuiFileDialog/ImGuiFileDialog.h"
@@ -63,56 +65,15 @@ private:
 	static std::stringstream buffer;
 
 	glm::mat4 LightSpaceMatrix;
-
-	//unsigned int envCubemap = 0;
-	//unsigned int irradianceMap = 0;
-	//unsigned int prefilterMap = 0;
-	//unsigned int brdfLUTTexture = 0;
-
-	int effectMode = 0;
-	int toneMappingMode = 0;
-	float offset = 500.0f;
-
-	float scanPos = 0.0f;
-
-	//glm::vec3 normalColor;
-
-	//bool enableInstancing = false;
-	//int instance = 1;
-
-	bool useMSAA = true;
-	bool useBlinnPhong = true;
-	bool useQuadratic = true;
+	RenderSettings settings;
 
 	const unsigned int SHADOW_Size = 1024;
 	const unsigned int resolution = 1024;
 
-	bool useShadows = false;
-
-	std::vector<uint8_t> hasNormal;
-	bool hasHeight = false;
-	float height_scale = 0.001f;
-	bool hasARMMap = false;
-
-	float samplerDistance = 1.0f;
-	bool useHdr = true;
-	bool useBloom = false;
-	float exposure = 1.0f;
-
-	std::vector<float> aoBias;
-	std::vector<float> roughnessBias;
-	std::vector<float> metallicBias;
-
-	bool useDeferred = false;
-	bool usePostProcess = false;
-	bool drawLights = false;
-	bool drawPlane = false;
-	bool drawDebug = false;
 	std::array<std::string, 4> debugLabels = { "Normal", "Roughness", "Metallic", "Depth" };
 
-	int framebufferWidth = 0;
-	int framebufferHeight = 0;
-	unsigned int finalTexture = 0;
+	RenderExtent renderExtent;
+	RenderOutput renderOutput;
 	// ------------------------------------------------------------------------------
 	static void releaseEnvironmentMaps(Environment& env);
 	void prepareEnvironment(Environment& env);
@@ -138,6 +99,9 @@ public:
 	void init();
 	void shutdown();
 	void render(Scene& scene);
+	RenderSettings& getSettings() { return settings; }
+	const RenderSettings& getSettings() const { return settings; }
+	const RenderOutput& getOutput() const { return renderOutput; }
 	static void InitConsole();
 	void onImGuiRender();
 };
