@@ -23,22 +23,3 @@ void Light::Update()
 	//	cos(angle)
 	//));
 }
-
-void Light::dirOnImGuiRender()
-{
-	ImGui::ColorEdit3("Light Color", glm::value_ptr(color));
-	ImGui::DragFloat3("Light Direction", glm::value_ptr(direction));
-	ImGui::SliderFloat("Light Intensity", &intensity, 0.05f, 100.0f);
-}
-
-void Light::pointOnImGuiRender(int index)
-{
-	ImGui::PushID(index);
-
-	ImGui::Checkbox("Enabled", &enabled);
-	ImGui::ColorEdit3("Light Color", glm::value_ptr(color));
-	ImGui::DragFloat3("Light Position", glm::value_ptr(position));
-	ImGui::SliderFloat("Light Intensity", &intensity, 0.05f, 100.0f);
-
-	ImGui::PopID();
-}

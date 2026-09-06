@@ -5,6 +5,7 @@
 #include "InputManager.h"
 #include "ResourceManager.h"
 #include "Scene.h"
+#include "Editor/EditorLayer.h"
 
 class Application
 {
@@ -14,11 +15,11 @@ private:
 	Scene mainScene;
 	Window window;
 	Renderer renderer;
+	RenderSettings renderSettings;
+	EditorLayer editor;
 	bool running;
 
 	void init();
-	void initImGui();
-	void shutdownImGui();
 	void update(float deltaTime);
 
 public:

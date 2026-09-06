@@ -1,7 +1,5 @@
 #include "../include/Application.h"
-#include "../third_party/imgui/imgui.h"
-#include "../third_party/imgui/backends/imgui_impl_glfw.h"
-#include "../third_party/imgui/backends/imgui_impl_opengl3.h"
+#include "../include/RenderExtraction.h"
 
 #include <iostream>
 
@@ -10,7 +8,7 @@ Application::Application(const char* title)
 	  input(camera),
 	  mainScene(),
 	  window(title, input),
-	  renderer(camera, input, window, mainScene),
+	  renderer(),
 	  running(true)
 {
 	if (!window.getWindow())
@@ -58,10 +56,7 @@ void Application::init()
 	auto model3 = res.LoadModel("../assets/models/marble_bust_01_4k/marble_bust_01_4k.gltf");
 
 	auto material = res.LoadMaterial("material");
-	auto environmentMap = res.LoadTexture("../assets/hdr/newport_loft.hdr", HDR);
-
-	auto envAsset = std::make_shared<EnvironmentAsset>();
-	envAsset->hdrTexture = environmentMap ? environmentMap->getID() : 0;
+	auto envAsset = res.LoadEnvironment("../assets/hdr/newport_loft.hdr");
 
 	mainScene.AddObject(model, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f), material);
 	mainScene.AddObject(model2, glm::vec3(0.0f, -5.5f, 0.0f), glm::vec3(5.0f), material);
@@ -72,49 +67,17 @@ void Application::init()
 	mainScene.AddPointLight(Light(glm::vec3(2.0f, 2.0f, 2.0f), 1.0f, glm::vec3(3.0f, 0.5f, 1.0f), LightType::Point));
 	mainScene.AddPointLight(Light(glm::vec3(2.0f, 2.0f, 2.0f), 1.0f, glm::vec3(-0.8f, 2.4f, -1.0f), LightType::Point));
 	mainScene.SetEnvironment(envAsset);
-	renderer.init();
-}
-
-void Application::initImGui()
-{
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-
-	// Enable docking and multi-viewport (allows windows to be dragged outside main window)
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;   // optional: keyboard controls
-	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;       // enable docking
-	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;     // enable multi-viewport / platform windows
-
-	ImGui::StyleColorsDark();
-
-	// When viewports enabled, tweak style for platform windows
-	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-		ImGuiStyle& style = ImGui::GetStyle();
-		style.WindowRounding = 0.0f;
-		style.Colors[ImGuiCol_WindowBg].w = 1.0f;
-	}
-
-	ImGui_ImplGlfw_InitForOpenGL(window.getWindow(), true);
-	ImGui_ImplOpenGL3_Init("#version 330");
-}
-
-void Application::shutdownImGui()
-{
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
+	renderer.init(res, {static_cast<std::uint32_t>(window.getWidth()), static_cast<std::uint32_t>(window.getHeight())});
 }
 
 void Application::run()
 {
 	if (!running) return;
 
-	// initial ImGui
-	initImGui();
+	// The editor owns its UI context and backends.
+	editor.initialize(window.getWindow());
 
 	float lastFrame = 0.0f;
-	int drawCall = 1;
 
 	while (!glfwWindowShouldClose(window.getWindow())) {
 		
@@ -128,30 +91,17 @@ void Application::run()
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f); //custom color for screen clean
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		renderer.render(mainScene);
-		//std::cout << "DrawCall: " << drawCall << std::endl;
-		drawCall++;
-
-		// ImGui new frame 
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
-
-		// ImGui content	
-		renderer.onImGuiRender();
-
-		// render ImGui
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-		// Update and render additional platform windows when viewports are enabled
-		ImGuiIO& io = ImGui::GetIO();
-		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-			GLFWwindow* backup_current_context = glfwGetCurrentContext();
-			ImGui::UpdatePlatformWindows();
-			ImGui::RenderPlatformWindowsDefault();
-			glfwMakeContextCurrent(backup_current_context);
-		}
+		const auto extent = renderer.resize(editor.requestedExtent());
+		// Preserve the editor's sticky post-process toggle without mutating settings inside Renderer.
+		if (renderSettings.deferred) renderSettings.postProcess.enabled = true;
+		const RenderFrameData frame{currentFrame, input.isParallelLightOn(), input.isPointLightOn()};
+		const auto output = renderer.render(BuildRenderScene(mainScene),
+			BuildCameraData(camera, extent), renderSettings, frame);
+		editor.beginFrame();
+		editor.draw(mainScene, renderSettings, output, input,
+			[this] { renderer.restoreShaderBindings(); });
+		input.setCaptureState(editor.captureState());
+		editor.endFrame();
 
 		// Swap buffers and poll IO events
 		glfwSwapBuffers(window.getWindow());
@@ -173,10 +123,7 @@ void Application::update(float deltaTime)
 
 Application::~Application()
 {
-	if (running)
-	{
-		shutdownImGui();
-	}
+	editor.shutdown();
 
 	// Release every OpenGL-backed resource while the window/context still exists.
 	renderer.shutdown();

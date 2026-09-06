@@ -1,56 +1,40 @@
 #pragma once
 
-#include "Window.h"
-#include "Texture.h"
-#include "Mesh.h"
+#include <glad/glad.h>
+#include <array>
+#include "FramebufferDesc.h"
 
 class FrameBuffer
 {
-private:
-	unsigned int width, height;
-	GLuint FBO = 0, RBO = 0;
-	static constexpr int MAX_COLOR_ATTACHMENTS = 8;
-	GLuint texColors[MAX_COLOR_ATTACHMENTS] = {0};
-	GLuint texDepth2D = 0, texDepthCube = 0;
-	GLuint gDepth = 0;
-	bool m_useDepth;
-	bool m_useMs;
-	bool m_useDepthMap2D;
-	bool m_useDepthCube;
-	bool m_useHdr;
-	bool m_useGbuffer;
-	int m_colorCount;
-
-	void init(unsigned int w, unsigned int h);
-	void cleanUp();
-	void moveFrom(FrameBuffer&& other) noexcept;
-
 public:
-	FrameBuffer(Window& window, bool useDepth = true, bool useMs = false, bool useDepthMap2D = false, bool useDepthCube = false, bool useHdr = false, int colorCount = 1, bool useGbuffer = false);
+    explicit FrameBuffer(FramebufferDesc desc);
+    ~FrameBuffer();
 
-	FrameBuffer(unsigned int w = 1920, unsigned int h = 1080, bool useDepth = true, bool useMs = false, bool useDepthMap2D = false, bool useDepthCube = false, bool useHdr = false, int colorCount = 1, bool useGbuffer = false);
+    FrameBuffer(const FrameBuffer&) = delete;
+    FrameBuffer& operator=(const FrameBuffer&) = delete;
+    FrameBuffer(FrameBuffer&& other) noexcept;
+    FrameBuffer& operator=(FrameBuffer&& other) noexcept;
 
-	~FrameBuffer();
+    void resize(unsigned int newWidth, unsigned int newHeight);
+    const FramebufferDesc& getDesc() const { return desc; }
+    GLuint getFBO() const { return FBO; }
+    GLuint getColor(int index = 0) const
+    {
+        return index >= 0 && static_cast<std::size_t>(index) < desc.colors.size() ? texColors[index] : 0;
+    }
+    GLuint getDepth2D() const { return texDepth2D; }
+    GLuint getDepthCube() const { return texDepthCube; }
+    unsigned int getWidth() const { return desc.extent.width; }
+    unsigned int getHeight() const { return desc.extent.height; }
 
-	FrameBuffer(const FrameBuffer&) = delete;
-	FrameBuffer& operator=(const FrameBuffer&) = delete;
-	FrameBuffer(FrameBuffer&& other) noexcept;
-	FrameBuffer& operator=(FrameBuffer&& other) noexcept;
+private:
+    FramebufferDesc desc;
+    GLuint FBO = 0, RBO = 0;
+    std::array<GLuint, FramebufferDesc::MaxColorAttachments> texColors{};
+    GLuint texDepth2D = 0, texDepthCube = 0;
 
-	void resize(unsigned int newWidth, unsigned int newHeight);
-
-	GLuint getFBO() const { return FBO; }
-	GLuint getColor(int index = 0) const 
-	{
-		if (index < 0 || index >= m_colorCount)
-			return 0;
-
-		return texColors[index]; 
-	}
-	GLuint getGDepth() const { return gDepth; }
-	GLuint getDepth2D() const { return texDepth2D; }
-	GLuint getDepthCube() const { return texDepthCube; }
-	unsigned int getWidth() const { return width; }
-	unsigned int getHeight() const { return height; }
+    void init();
+    void cleanUp();
+    void moveFrom(FrameBuffer&& other) noexcept;
 };
 

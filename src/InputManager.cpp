@@ -1,6 +1,5 @@
 #include <iostream>
 #include "../include/InputManager.h"
-#include "../third_party/imgui/imgui.h"
 
 InputManager::InputManager(Camera& cam)
 	:camera(cam) {
@@ -16,7 +15,7 @@ void InputManager::update(GLFWwindow* window, float deltaTime)
 
 void InputManager::onMouseMove(double xpos, double ypos)
 {
-	if (cursorVisible)
+	if (cursorVisible || captureState.mouseCaptured)
 		return;
 
 	if (firstMouse) {
@@ -35,7 +34,7 @@ void InputManager::onMouseMove(double xpos, double ypos)
 
 void InputManager::onScroll(double xoffset, double yoffset)
 {
-	if (!sceneHovered)
+	if (!captureState.viewportHovered || captureState.mouseCaptured)
 		return;
 
 	camera.ProcessMouseScroll(static_cast<float>(yoffset));
@@ -43,14 +42,11 @@ void InputManager::onScroll(double xoffset, double yoffset)
 
 void InputManager::handleCursor(GLFWwindow* window)
 {
-	ImGuiIO& io = ImGui::GetIO();
-	mouseOverImGui = io.WantCaptureMouse && !sceneHovered;
-
 	bool altNow = glfwGetKey(window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS;
 	if (altNow != altPressed)
 		altPressed = altNow;
 
-	if (altPressed || mouseOverImGui) {
+	if (altPressed || captureState.mouseCaptured) {
 		if (!cursorVisible) {
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 			cursorVisible = true;
@@ -67,6 +63,8 @@ void InputManager::handleCursor(GLFWwindow* window)
 
 void InputManager::handleMovement(GLFWwindow* window, float deltaTime)
 {
+	if (captureState.keyboardCaptured) return;
+
 	float speed = moveSpeed * deltaTime;
 
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
@@ -92,9 +90,9 @@ void InputManager::handleLightSwitch(GLFWwindow* window)
 	bool pointPressed = glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS;
 	bool spotPressed = glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS;
 
-	if (parallelPressed && !lastParallelKey)
+	if (!captureState.keyboardCaptured && parallelPressed && !lastParallelKey)
 		parallelLightOn = !parallelLightOn;
-	if (pointPressed && !lastPointKey)
+	if (!captureState.keyboardCaptured && pointPressed && !lastPointKey)
 		pointLightOn = !pointLightOn;
 	/*if (spotPressed && !lastSpotKey)
 		spotLightOn = !spotLightOn;*/
@@ -108,10 +106,4 @@ void InputManager::handleWindowClose(GLFWwindow* window)
 {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		requestClose = true;
-}
-
-void InputManager::onImGuiRender()
-{
-	ImGui::Text("Input Settings");
-	ImGui::SliderFloat("Move Speed", &moveSpeed, 1.0f, 100.0f);
 }

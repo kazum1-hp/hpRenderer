@@ -1,108 +1,33 @@
 #pragma once
-#include "Shader.h"
-#include "Model.h"
-#include "FrameBuffer.h"
-#include "Skybox.h"
-#include "Camera.h"
-#include "Light.h"
-#include "Material.h"
-#include "InputManager.h"
-#include "Window.h"
-#include "Transform.h"
-#include "RenderLimits.h"
+#include "IBLCache.h"
 #include "RenderSettings.h"
 #include "RenderTypes.h"
-#include "../third_party/imgui/imgui.h"
-#include "../third_party/imgui/imgui_internal.h"
-#include "../third_party/ImGuiFileDialog/ImGuiFileDialog.h"
-#include "../third_party/ImGuiFileDialog/ImGuiFileDialogConfig.h"
-
-#include <array>
-#include <vector>
+#include "RenderScene.h"
+#include "RenderFrameData.h"
 #include <memory>
-#include <sstream>
 
-class Scene;
-struct Environment;
 class ResourceManager;
+namespace Rendering { class RenderPipeline; }
 
 class Renderer
 {
-private:
-	// --- External reference ---
-	Window& window;
-	Camera& camera;
-	InputManager& input;
-	Scene& scene;
-
-	// --- Pipeline Resource ---
-	// The renderer needs to hold the shaders it uses to perform rendering tasks, but the data is obtained from the ResourceManager.
-	std::shared_ptr<Shader> modelShader;
-	std::shared_ptr<Shader> lightShader;
-	std::shared_ptr<Shader> sceneFramebufferShader;
-	std::shared_ptr<Shader> skyboxShader;
-	std::shared_ptr<Shader> dirShadowShader;
-	std::shared_ptr<Shader> pointShadowShader;
-	std::shared_ptr<Shader> bloomBlurShader;
-	std::shared_ptr<Shader> gBufferShader;
-	std::shared_ptr<Shader> lightPassShader;
-	std::shared_ptr<Shader> debugShader;
-	std::shared_ptr<Shader> gbufferDebugShader;
-	std::shared_ptr<Shader> backgroundShader;
-	std::shared_ptr<Shader> irradianceShader;
-	std::shared_ptr<Shader> prefilterShader;
-	std::shared_ptr<Shader> brdfShader;
-
-	// framebuffers
-	std::vector<std::unique_ptr<FrameBuffer>> framebuffers;
-	std::unique_ptr<FrameBuffer> pingpongFrameBuffer[2];
-	std::vector<std::unique_ptr<FrameBuffer>> pointShadowFramebuffers;
-
-	std::shared_ptr<Mesh> screenQuad;
-	std::shared_ptr<Mesh> plane;
-	std::shared_ptr<Mesh> cube;
-
-	static std::stringstream buffer;
-
-	glm::mat4 LightSpaceMatrix;
-	RenderSettings settings;
-
-	const unsigned int SHADOW_Size = 1024;
-	const unsigned int resolution = 1024;
-
-	std::array<std::string, 4> debugLabels = { "Normal", "Roughness", "Metallic", "Depth" };
-
-	RenderExtent renderExtent;
-	RenderOutput renderOutput;
-	// ------------------------------------------------------------------------------
-	static void releaseEnvironmentMaps(Environment& env);
-	void prepareEnvironment(Environment& env);
-	void generateIBLMaps(Environment& env);
-	void syncPointShadowFramebuffers(std::size_t count);
-
-	void renderModel(const Transform& transform, const Model& model, Shader& shader);
-	void drawMesh(const Mesh& mesh, Shader& shader, bool useNormalMap, bool useHeightMap, bool useARMMap) const;
-	void drawModel(const Model& model, Shader& shader, bool useNormalMap, bool useHeightMap, bool useARMMap) const;
-	void resizeFrameBuffer(unsigned int newWidth, unsigned int newHeight);
-	void refreshDebugLabels();
-
-	void forwardPass(Scene& scene);
-	void deferredPass(Scene& scene);
-	void shadowPass(Scene& scene);
-	void geometryPass(Scene& scene);
-	void lightPass(Scene& scene);
-	void postProcessPass(const FrameBuffer& framebuffer);
-
 public:
-	Renderer(Camera& cam, InputManager& input, Window& win, Scene& scene);
-	~Renderer();
-	void init();
-	void shutdown();
-	void render(Scene& scene);
-	RenderSettings& getSettings() { return settings; }
-	const RenderSettings& getSettings() const { return settings; }
-	const RenderOutput& getOutput() const { return renderOutput; }
-	static void InitConsole();
-	void onImGuiRender();
+    // Construction/destruction without init performs no GL calls.
+    Renderer();
+    ~Renderer();
+    Renderer(const Renderer&) = delete;
+    Renderer& operator=(const Renderer&) = delete;
+    // The caller owns/makes current the GL context for initialization, drawing and shutdown.
+    void init(ResourceManager& resources, RenderExtent extent);
+    void shutdown();
+    RenderOutput render(const RenderScene& scene, const CameraData& camera,
+        const RenderSettings& settings, const RenderFrameData& frame);
+    // Returns the actual extent, including when a resize fails and retains old targets.
+    RenderExtent resize(RenderExtent extent);
+    void restoreShaderBindings();
+
+private:
+    std::unique_ptr<Rendering::RenderPipeline> pipeline;
+    IBLCache iblCache;
 };
 

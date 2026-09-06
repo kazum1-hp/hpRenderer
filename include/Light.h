@@ -1,7 +1,5 @@
 #pragma once
 
-#include "../third_party/imgui/imgui.h"
-
 #include "ResourceManager.h"
 
 enum class LightType {
@@ -59,8 +57,7 @@ public:
 	GLfloat getFar() const { return far; }
 	bool lightOn() const { return enabled; }
 
-	void dirOnImGuiRender();
-	void pointOnImGuiRender(int index);
+	void setEnabled(bool value) { enabled = value; }
 
 private:
 	LightType type;

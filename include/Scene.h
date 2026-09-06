@@ -8,6 +8,7 @@
 #include "Transform.h"
 #include "Material.h"
 #include "RenderLimits.h"
+#include "EnvironmentAsset.h"
 
 // In order to place the model in the scene, we need a struct to store the model pointer and position information.
 struct RenderObject {
@@ -16,32 +17,10 @@ struct RenderObject {
     MaterialInstance material;
 };
 
-struct EnvironmentAsset {
-    GLuint hdrTexture;
+struct Environment
+{
+    std::shared_ptr<const EnvironmentAsset> asset;
 };
-
-struct EnvironmentMaps {
-    GLuint envCubemap = 0;
-    GLuint irradianceMap = 0;
-    GLuint prefilterMap = 0;
-    GLuint brdfLUT = 0;
-
-    bool isGenerated = false;
-    GLuint lastHDR = 0; // Prevent duplicate generation
-};
-
-struct Environment {
-    std::shared_ptr<EnvironmentAsset> asset;
-    EnvironmentMaps maps;
-};
-
-//struct EnvironmentData {
-//    GLuint hdrTexture;        // origin HDR texture
-//    GLuint envCubemap;       // Converted cube environment map
-//    GLuint irradianceMap;    // irradianceMap
-//    GLuint prefilterMap;     // prefilterMap
-//    GLuint brdfLUT;          // BRDF Lookup table
-//};
 
 class Scene {
 public:
@@ -79,9 +58,8 @@ public:
         environment = {};
     }
 
-    void SetEnvironment(std::shared_ptr<EnvironmentAsset> envAsset) {
+    void SetEnvironment(std::shared_ptr<const EnvironmentAsset> envAsset) {
         environment.asset = envAsset;
-        environment.maps.isGenerated = false; // The tag needs to be regenerated.
     }
 
     // --- Getters ---
@@ -96,7 +74,6 @@ public:
     
     Environment& GetEnvironment() { return environment; }
     const Environment& GetEnvironment() const { return environment; }
-    //const GLuint GetSkybox() const { return env.hdrTexture; }
 
 private:
     std::vector<RenderObject> objects;

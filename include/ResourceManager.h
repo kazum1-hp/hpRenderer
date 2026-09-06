@@ -17,6 +17,7 @@
 #include "Model.h"
 #include "Mesh.h"
 #include "Material.h"
+#include "EnvironmentAsset.h"
 
 class ResourceManager {
 public:
@@ -35,6 +36,7 @@ public:
         plane.reset();
         cube.reset();
         textures.clear();
+        environments.clear();
         shaders.clear();
         materials.clear();
     }
@@ -107,6 +109,33 @@ public:
 
         textures[path] = tex;
         return tex;
+    }
+
+    // Environment metadata contains no GPU ownership. All selected scenes sharing
+    // this asset see successful reloads through its revision.
+    std::shared_ptr<const EnvironmentAsset> LoadEnvironment(const std::string& path) {
+        if (!LoadTexture(path, HDR)) return nullptr;
+        auto asset = environments[path].lock();
+        if (!asset) {
+            asset = std::make_shared<EnvironmentAsset>(path);
+            environments[path] = asset;
+        }
+        return asset;
+    }
+
+    std::shared_ptr<const EnvironmentAsset> ReloadEnvironment(const std::string& path) {
+        if (!ReloadTexture(path, HDR)) return nullptr;
+        auto asset = environments[path].lock();
+        if (asset) ++asset->revision;
+        else {
+            asset = std::make_shared<EnvironmentAsset>(path);
+            environments[path] = asset;
+        }
+        return asset;
+    }
+
+    std::shared_ptr<Texture> GetEnvironmentTexture(const EnvironmentAsset& asset) {
+        return LoadTexture(asset.getPath(), HDR);
     }
 
     // --- Model ---
@@ -296,6 +325,7 @@ private:
 
     std::unordered_map<std::string, std::shared_ptr<Shader>> shaders;
     std::unordered_map<std::string, std::shared_ptr<Texture>> textures;
+    std::unordered_map<std::string, std::weak_ptr<EnvironmentAsset>> environments;
     std::unordered_map<std::string, std::shared_ptr<Model>> models;
     std::unordered_map<std::string, std::shared_ptr<Material>> materials;
 

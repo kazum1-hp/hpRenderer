@@ -2,7 +2,6 @@
 
 #include "glm/glm.hpp"
 #include <glm/gtc/matrix_transform.hpp>
-#include "../third_party/imgui/imgui.h"
 
 class Transform
 {
@@ -39,47 +38,15 @@ public:
 		return model;
 	}
 
-	void onImGuiRender()
-	{
-        if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            ImGui::SeparatorText("Transform Settings");
+    glm::vec3 getPosition() const { return position; }
+    glm::vec3 getRotation() const { return rotation; }
+    glm::vec3 getScale() const { return scale; }
 
-            // Position
-            if (ImGui::DragFloat3("Position", &position[0], 0.1f))
-            {
-                //  dirty flag
-            }
-
-            // Rotation (in degrees for UI)
-            glm::vec3 rotationDeg = glm::degrees(rotation);
-            if (ImGui::DragFloat3("Rotation", &rotationDeg[0], 0.5f))
-            {
-                rotation = glm::radians(rotationDeg);
-            }
-
-            // Scale
-            if (ImGui::DragFloat3("Scale", &scale[0], 0.05f))
-            {
-                // ensure scale not equal 0
-                if (scale.x == 0) scale.x = 0.001f;
-                if (scale.y == 0) scale.y = 0.001f;
-                if (scale.z == 0) scale.z = 0.001f;
-            }
-
-            // Reset buttons
-            if (ImGui::Button("Reset"))
-            {
-                position = initialPosition;
-                rotation = glm::vec3(0.0f);
-                scale = initialScale;
-            }
-
-            ImGui::SameLine();
-            if (ImGui::Button("Reset Rotation"))
-            {
-                rotation = glm::vec3(0.0f);
-            }
-        }
+    void reset()
+    {
+        position = initialPosition;
+        rotation = glm::vec3(0.0f);
+        scale = initialScale;
     }
+    void resetRotation() { rotation = glm::vec3(0.0f); }
 };

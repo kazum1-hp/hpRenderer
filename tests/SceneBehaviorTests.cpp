@@ -152,8 +152,11 @@ namespace
             glm::vec3(0.0f),
             LightType::Point));
 
-        auto environment = std::make_shared<EnvironmentAsset>();
-        environment->hdrTexture = 42;
+        auto environment = std::make_shared<EnvironmentAsset>("environment.hdr");
+        expect(environment->getPath() == "environment.hdr", "environment stores an asset path");
+        expect(environment->getRevision() == 1, "environment starts at revision one");
+        Scene otherScene;
+        otherScene.SetEnvironment(environment);
         scene.SetEnvironment(environment);
 
         scene.Clear();
@@ -161,6 +164,7 @@ namespace
         expect(scene.GetObjects().empty(), "Clear should remove all objects");
         expect(scene.GetPointLights().empty(), "Clear should remove all point lights");
         expect(!scene.GetEnvironment().asset, "Clear should release the selected environment");
+        expect(otherScene.GetEnvironment().asset == environment, "clearing one scene preserves another selection");
     }
 }
 

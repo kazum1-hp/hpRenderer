@@ -15,6 +15,7 @@ struct RenderExtent
 
 struct RenderOutput
 {
+    // Non-owning: resize/shutdown invalidates the texture; later renders may overwrite its pixels.
     unsigned int colorTexture = 0;
     RenderExtent extent;
 };

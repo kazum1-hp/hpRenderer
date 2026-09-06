@@ -1,230 +1,157 @@
-#include "../include/FrameBuffer.h"
+#include "FrameBuffer.h"
 #include <iostream>
 #include <utility>
 
-FrameBuffer::FrameBuffer(Window& window, bool useDepth, bool useMs, bool useDepthMap2D, bool useDepthCube, bool useHdr, int colorCount, bool useGbuffer)
-	: width(window.getWidth()), height(window.getHeight()),
-      m_useDepth(useDepth), m_useMs(useMs), m_useDepthMap2D(useDepthMap2D), m_useDepthCube(useDepthCube), m_useHdr(useHdr), m_colorCount(colorCount), m_useGbuffer(useGbuffer)
+FrameBuffer::FrameBuffer(FramebufferDesc description) : desc(std::move(description))
 {
-	init(width, height);
+    desc.validate();
+    try { init(); }
+    catch (...) { cleanUp(); throw; }
 }
 
-FrameBuffer::FrameBuffer(unsigned int w, unsigned int h, bool useDepth, bool useMs, bool useDepthMap2D, bool useDepthCube, bool useHdr, int colorCount, bool useGbuffer)
-	: width(w), height(h),
-      m_useDepth(useDepth), m_useMs(useMs), m_useDepthMap2D(useDepthMap2D), m_useDepthCube(useDepthCube), m_useHdr(useHdr), m_colorCount(colorCount), m_useGbuffer(useGbuffer)
+void FrameBuffer::init()
 {
-	init(width, height);
-}
+    GLint maxColors = 0, maxDrawBuffers = 0, maxTextureSize = 0, maxRenderbufferSize = 0, maxSamples = 0;
+    glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &maxColors);
+    glGetIntegerv(GL_MAX_DRAW_BUFFERS, &maxDrawBuffers);
+    glGetIntegerv(desc.depth && desc.depth->storage == DepthStorage::Cubemap ?
+        GL_MAX_CUBE_MAP_TEXTURE_SIZE : GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+    glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &maxRenderbufferSize);
+    glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+    const auto exceeds = [this](GLint limit) {
+        return limit <= 0 || desc.extent.width > static_cast<unsigned int>(limit) ||
+            desc.extent.height > static_cast<unsigned int>(limit);
+    };
+    if (static_cast<GLint>(desc.colors.size()) > maxColors || static_cast<GLint>(desc.colors.size()) > maxDrawBuffers ||
+        exceeds(maxTextureSize) ||
+        (desc.depth && desc.depth->storage == DepthStorage::Renderbuffer && exceeds(maxRenderbufferSize)) ||
+        (desc.samples > 1 && desc.samples > static_cast<unsigned int>(maxSamples)))
+        throw std::runtime_error("Framebuffer '" + desc.debugName + "' exceeds current OpenGL limits");
 
-void FrameBuffer::init(unsigned int w, unsigned int h)
-{
-	glGenFramebuffers(1, &FBO);
-	glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+    const auto w = static_cast<GLsizei>(desc.extent.width);
+    const auto h = static_cast<GLsizei>(desc.extent.height);
+    glGenFramebuffers(1, &FBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, FBO);
 
-    if (m_colorCount > 0 && !m_useDepthMap2D && !m_useDepthCube)
+    std::array<GLenum, FramebufferDesc::MaxColorAttachments> attachments{};
+    for (std::size_t i = 0; i < desc.colors.size(); ++i)
     {
-        if (!m_useMs) {
-            for (int i = 0; i < m_colorCount; ++i)
-            {
-                // color attachment (non-MSAA)
-                glGenTextures(1, &texColors[i]);
-                glBindTexture(GL_TEXTURE_2D, texColors[i]);
-
-                // useHdr or not
-                GLenum internalFormat = m_useHdr ? GL_RGBA16F : GL_RGB;
-                GLenum format = m_useHdr ? GL_RGBA : GL_RGB;
-                GLenum type = m_useHdr ? GL_FLOAT : GL_UNSIGNED_BYTE;
-                GLenum pname = m_useGbuffer ? GL_NEAREST : GL_LINEAR;
-                glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, w, h, 0, format, type, nullptr);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, pname);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, pname);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, texColors[i], 0);
-            }
-
-            if (!m_useDepth)
-            {
-                glGenTextures(1, &gDepth);
-                glBindTexture(GL_TEXTURE_2D, gDepth);
-
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gDepth, 0);
-            }
+        const auto& color = desc.colors[i];
+        const bool hdr = color.format == ColorFormat::RGBA16F;
+        const GLenum target = desc.samples > 1 ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
+        glGenTextures(1, &texColors[i]);
+        glBindTexture(target, texColors[i]);
+        if (desc.samples > 1)
+            glTexImage2DMultisample(target, desc.samples, GL_RGB8, w, h, GL_TRUE);
+        else
+        {
+            glTexImage2D(target, 0, hdr ? GL_RGBA16F : GL_RGB8, w, h, 0,
+                hdr ? GL_RGBA : GL_RGB, hdr ? GL_FLOAT : GL_UNSIGNED_BYTE, nullptr);
+            const GLenum filter = color.filter == TextureFilter::Nearest ? GL_NEAREST : GL_LINEAR;
+            glTexParameteri(target, GL_TEXTURE_MIN_FILTER, filter);
+            glTexParameteri(target, GL_TEXTURE_MAG_FILTER, filter);
+            glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         }
-        else {
-            // MSAA texture (does not support HDR, only one color attachment)
-            if (m_colorCount > 1) {
-                std::cerr << "ERROR: MSAA Framebuffer cannot have multiple color attachments!" << std::endl;
-                m_colorCount = 1;  // reduce to 1
-            }
-            if (m_useHdr) {
-                std::cerr << "ERROR: MSAA does not support HDR format! Forcing RGB8" << std::endl;
-            }
-
-            // multisample color texture attachment
-            glGenTextures(1, &texColors[0]);
-            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texColors[0]);
-            glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGB, w, h, GL_TRUE);
-            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, texColors[0], 0);
-        }
-        std::vector<GLenum> attachments;
-        for (int i = 0; i < m_colorCount; ++i)
-            attachments.push_back(GL_COLOR_ATTACHMENT0 + i);
-        glDrawBuffers(static_cast<GLsizei>(attachments.size()), attachments.data());
+        attachments[i] = GL_COLOR_ATTACHMENT0 + static_cast<GLenum>(i);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, attachments[i], target, texColors[i], 0);
     }
-    else {
-        // Shadow map: no color attachment
+    if (desc.colors.empty())
+    {
         glDrawBuffer(GL_NONE);
         glReadBuffer(GL_NONE);
     }
-    // depth buffer options:
-    // 1) useDepthMap2D => create and attach a 2D depth texture (for directional shadow maps)
-    // 2) useDepthCube  => create and attach a cube depth texture (for point light shadow maps)
-    // 3) useDepth (renderbuffer) => create RBO depth/stencil
+    else glDrawBuffers(static_cast<GLsizei>(desc.colors.size()), attachments.data());
 
-    if (m_useDepthMap2D) {
-        // create 2D depth texture
-        glGenTextures(1, &texDepth2D);
-        glBindTexture(GL_TEXTURE_2D, texDepth2D);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-        float borderColor[] = { 1.0f,1.0f,1.0f,1.0f };
-        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texDepth2D, 0);
-    }
-    else if (m_useDepthCube) {
-        // create cube depth texture
-        glGenTextures(1, &texDepthCube);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, texDepthCube);
-        for (unsigned int i = 0; i < 6; ++i) {
-            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT,
-                w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    if (desc.depth)
+    {
+        const auto& depth = *desc.depth;
+        if (depth.storage == DepthStorage::Renderbuffer)
+        {
+            glGenRenderbuffers(1, &RBO);
+            glBindRenderbuffer(GL_RENDERBUFFER, RBO);
+            if (desc.samples > 1)
+                glRenderbufferStorageMultisample(GL_RENDERBUFFER, desc.samples, GL_DEPTH24_STENCIL8, w, h);
+            else glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, w, h);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
         }
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-        // attach the whole cubemap as depth attachment (valid: will allow layered rendering with GS)
-        glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, texDepthCube, 0);
-    }
-    else if (m_useDepth) {
-        // renderbuffer depth/stencil
-        glGenRenderbuffers(1, &RBO);
-        glBindRenderbuffer(GL_RENDERBUFFER, RBO);
-        if (m_useMs) {
-            // multisample RBO handled elsewhere in code path; but keep here for completeness
-            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, w, h);
+        else
+        {
+            const bool cube = depth.storage == DepthStorage::Cubemap;
+            GLuint& texture = cube ? texDepthCube : texDepth2D;
+            const GLenum target = cube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+            const GLenum format = depth.format == DepthFormat::Depth24 ? GL_DEPTH_COMPONENT24 : GL_DEPTH_COMPONENT;
+            glGenTextures(1, &texture);
+            glBindTexture(target, texture);
+            for (int face = 0; face < (cube ? 6 : 1); ++face)
+                glTexImage2D(cube ? GL_TEXTURE_CUBE_MAP_POSITIVE_X + face : target, 0, format,
+                    w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+            glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            const GLenum wrap = depth.wrap == DepthWrap::ClampToBorder ? GL_CLAMP_TO_BORDER : GL_CLAMP_TO_EDGE;
+            glTexParameteri(target, GL_TEXTURE_WRAP_S, wrap);
+            glTexParameteri(target, GL_TEXTURE_WRAP_T, wrap);
+            if (cube) glTexParameteri(target, GL_TEXTURE_WRAP_R, wrap);
+            if (depth.wrap == DepthWrap::ClampToBorder)
+            {
+                const float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+                glTexParameterfv(target, GL_TEXTURE_BORDER_COLOR, borderColor);
+            }
+            if (cube) glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, texture, 0);
+            else glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, target, texture, 0);
         }
-        else {
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, w, h);
-        }
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
     }
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "FBO: " << FBO << ", ERROR :: FRAMEBUFFER :: FrameBuffer is not complete!" << std::endl;
-    }
-    std::cout << "FBO: " << FBO << ", FrameBuffer is complete!" << std::endl;
+    const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+        throw std::runtime_error("Framebuffer '" + desc.debugName + "' is incomplete (status " + std::to_string(status) + ")");
+    std::cout << "FBO: " << FBO << " ('" << desc.debugName << "'), FrameBuffer is complete!" << std::endl;
 }
 
 void FrameBuffer::cleanUp()
 {
-    // Clean up existing resources (similar to destructor)
-    for (int i = 0; i < m_colorCount; ++i)
+    for (auto& color : texColors)
     {
-        if (texColors[i]) {
-            glDeleteTextures(1, &texColors[i]);
-            texColors[i] = 0;
-        }
+        if (color) glDeleteTextures(1, &color);
+        color = 0;
     }
-    if (gDepth != 0) {
-        glDeleteTextures(1, &gDepth);
-        gDepth = 0;
-    }
-    if (texDepth2D) {
-        glDeleteTextures(1, &texDepth2D);
-        texDepth2D = 0;
-    }
-    if (texDepthCube) {
-        glDeleteTextures(1, &texDepthCube);
-        texDepthCube = 0;
-    }
-    if (RBO) {
-        glDeleteRenderbuffers(1, &RBO);
-        RBO = 0;
-    }
-    if (FBO) {
-        glDeleteFramebuffers(1, &FBO);
-        FBO = 0;
-    }
+    if (texDepth2D) glDeleteTextures(1, &texDepth2D);
+    if (texDepthCube) glDeleteTextures(1, &texDepthCube);
+    if (RBO) glDeleteRenderbuffers(1, &RBO);
+    if (FBO) glDeleteFramebuffers(1, &FBO);
+    texDepth2D = texDepthCube = RBO = FBO = 0;
 }
 
 void FrameBuffer::resize(unsigned int newWidth, unsigned int newHeight)
 {
-    if (newWidth == width && newHeight == height) { return; }  // No change needed
-
-    cleanUp();
-
-    // Update dimensions
-    width = newWidth;
-    height = newHeight;
-
-    // Re-initialize with new size
-    init(width, height);
+    if (newWidth == getWidth() && newHeight == getHeight()) return;
+    auto resized = desc;
+    resized.extent = { newWidth, newHeight };
+    // Keep the old allocation alive if validation or creation fails.
+    FrameBuffer replacement(std::move(resized));
+    *this = std::move(replacement);
 }
 
-FrameBuffer::~FrameBuffer()
-{
-    cleanUp();
-}
-
-FrameBuffer::FrameBuffer(FrameBuffer&& other) noexcept
-{
-    moveFrom(std::move(other));
-}
-
+FrameBuffer::~FrameBuffer() { cleanUp(); }
+FrameBuffer::FrameBuffer(FrameBuffer&& other) noexcept { moveFrom(std::move(other)); }
 FrameBuffer& FrameBuffer::operator=(FrameBuffer&& other) noexcept
 {
-    if (this == &other) return *this;
-
-    cleanUp();
-    moveFrom(std::move(other));
+    if (this != &other)
+    {
+        cleanUp();
+        moveFrom(std::move(other));
+    }
     return *this;
 }
 
 void FrameBuffer::moveFrom(FrameBuffer&& other) noexcept
 {
-    width = other.width;
-    height = other.height;
+    desc = std::move(other.desc);
     FBO = std::exchange(other.FBO, 0);
     RBO = std::exchange(other.RBO, 0);
-    for (int i = 0; i < MAX_COLOR_ATTACHMENTS; ++i)
-    {
+    for (std::size_t i = 0; i < texColors.size(); ++i)
         texColors[i] = std::exchange(other.texColors[i], 0);
-    }
     texDepth2D = std::exchange(other.texDepth2D, 0);
     texDepthCube = std::exchange(other.texDepthCube, 0);
-    gDepth = std::exchange(other.gDepth, 0);
-    m_useDepth = other.m_useDepth;
-    m_useMs = other.m_useMs;
-    m_useDepthMap2D = other.m_useDepthMap2D;
-    m_useDepthCube = other.m_useDepthCube;
-    m_useHdr = other.m_useHdr;
-    m_useGbuffer = other.m_useGbuffer;
-    m_colorCount = std::exchange(other.m_colorCount, 0);
+    other.desc.extent = {};
 }

@@ -1,6 +1,6 @@
 #pragma once
 #include <GLFW/glfw3.h>
-#include "../third_party/imgui/imgui.h"
+#include "InputCaptureState.h"
 #include "Camera.h"
 
 class Window;
@@ -23,8 +23,9 @@ public:
 	bool isPointLightOn() const { return pointLightOn; }
 	//bool isSpotLightOn() const { return spotLightOn; }
 
-	void onImGuiRender();
-	void setSceneHovered(bool hovered) { sceneHovered = hovered; }
+	void setCaptureState(InputCaptureState state) { captureState = state; }
+	float getMoveSpeed() const { return moveSpeed; }
+	void setMoveSpeed(float value) { moveSpeed = value; }
 
 private:
 	void handleCursor(GLFWwindow* window);
@@ -52,8 +53,6 @@ private:
 
 	bool cursorVisible = false;
 	bool altPressed = false;
-	bool mouseOverImGui = false;
-
-	bool sceneHovered = false;
+	InputCaptureState captureState;
 };
 
