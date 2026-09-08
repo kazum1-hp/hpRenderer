@@ -24,7 +24,7 @@ struct ParallelLight {
 };
 
 struct PointLight {
-	vec3 position;  
+	vec3 position;
     vec3 color;
     float intensity;
 
@@ -46,6 +46,7 @@ uniform sampler2D depthMap;
 uniform samplerCube shadowMap[MAX_POINT_LIGHTS];
 
 uniform samplerCube irradianceMap;
+uniform bool useIBL;
 uniform samplerCube prefilterMap;
 uniform sampler2D brdfLUT;
 
@@ -58,6 +59,23 @@ uniform sampler2D specular;
 uniform sampler2D normal;
 uniform sampler2D height;
 uniform sampler2D arm;
+uniform vec4 baseColorFactor;
+uniform float roughnessFactor;
+uniform float metallicFactor;
+uniform int alphaMode;
+uniform float alphaCutoff;
+uniform bool doubleSided;
+uniform bool hasDiffuseMap;
+uniform bool hasOpacityMap;
+uniform bool hasAOMap;
+uniform bool hasRoughnessMap;
+uniform bool hasMetallicMap;
+uniform sampler2D opacityMap;
+uniform sampler2D aoMap;
+uniform sampler2D roughnessMap;
+uniform sampler2D metallicMap;
+uniform int roughnessChannel;
+uniform int metallicChannel;
 
 uniform bool hasNormalMap;
 uniform bool hasHeightMap;
@@ -76,7 +94,7 @@ const float PI = 3.14159265359;
 // array of offset direction for sampling
 vec3 gridSamplingDisk[20] = vec3[]
 (
-   vec3(1, 1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1, 1,  1), 
+   vec3(1, 1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1, 1,  1),
    vec3(1, 1, -1), vec3( 1, -1, -1), vec3(-1, -1, -1), vec3(-1, 1, -1),
    vec3(1, 1,  0), vec3( 1, -1,  0), vec3(-1, -1,  0), vec3(-1, 1,  0),
    vec3(1, 0,  1), vec3(-1,  0,  1), vec3( 1,  0, -1), vec3(-1, 0, -1),
@@ -98,6 +116,26 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0);
 vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
 
 // ----------------------------------------------------------------------------
+vec4 surfaceColor(vec2 uv)
+{
+    vec4 color = baseColorFactor * (hasDiffuseMap ? texture(diffuse, uv) : vec4(1.0));
+    if (hasOpacityMap) color.a *= texture(opacityMap, uv).r;
+    if (alphaMode == 1 && color.a < alphaCutoff) discard;
+    if (alphaMode == 2 && color.a <= 0.001) discard;
+    if (alphaMode != 2) color.a = 1.0;
+    return color;
+}
+
+vec3 surfaceARM(vec2 uv)
+{
+    vec3 value = vec3(1.0, roughnessFactor, metallicFactor);
+    if (hasARMMap) value = texture(arm, uv).rgb; // Legacy built-in packed ARM.
+    if (hasAOMap) value.r = texture(aoMap, uv).r;
+    if (hasRoughnessMap) value.g = texture(roughnessMap, uv)[roughnessChannel] * roughnessFactor;
+    if (hasMetallicMap) value.b = texture(metallicMap, uv)[metallicChannel] * metallicFactor;
+    return clamp(value + vec3(aoBias, roughnessBias, metallicBias), vec3(0.0, 0.04, 0.0), vec3(1.0));
+}
+
 void main()
 {
 	vec3 N = normalize(fs_in.Normal);
@@ -116,7 +154,7 @@ void main()
 	{
 		viewDir = normalize(transpose(TBN) * viewDir);
 		texCoords = ParallaxMapping(fs_in.TexCoords, viewDir);
-	
+
 		// discards a fragment when sampling outside default texture region (fixes border artifacts)
 		// if(texCoords.x > 1.0 || texCoords.y > 1.0 || texCoords.x < 0.0 || texCoords.y < 0.0)
 			// discard;
@@ -130,22 +168,12 @@ void main()
 		//normalTex.y = -normalTex.y;
 		norm = normalize(TBN * normalTex);
 	}
-	
-	vec4 texColor = texture(diffuse, texCoords);
 
-    float ao, roughness, metallic;
-    ao = 1.0;
-    roughness = 0.5;
-    metallic = 0.0;
+    if (doubleSided && !gl_FrontFacing) { N = -N; norm = -norm; }
+	vec4 texColor = surfaceColor(texCoords);
 
-    if (hasARMMap)
-	{
-        vec3 arm = texture(arm, texCoords).rgb;
-
-	    ao        = clamp(arm.r + aoBias, 0.01, 1.0);
-	    roughness = clamp(arm.g + roughnessBias, 0.01, 1.0);
-	    metallic  = clamp(arm.b + metallicBias, 0.01, 1.0);
-    }
+    vec3 orm = surfaceARM(texCoords);
+    float ao = orm.r, roughness = orm.g, metallic = orm.b;
 
 	vec3 pointColor = vec3(0.0);
 
@@ -166,25 +194,28 @@ void main()
 
     vec3 ambient = vec3(0.0);
 
-    vec3 F0 = vec3(0.04); 
-    vec3 albedo = texColor.rgb;
-    F0 = mix(F0, albedo, metallic);
+    if (useIBL)
+    {
+        vec3 F0 = vec3(0.04);
+        vec3 albedo = texColor.rgb;
+        F0 = mix(F0, albedo, metallic);
 
-    vec3 kS = fresnelSchlickRoughness(max(dot(norm, viewDir), 0.0), F0, roughness);
-    vec3 kD = 1.0 - kS;
-    kD *= 1.0 - metallic;
+        vec3 kS = fresnelSchlickRoughness(max(dot(norm, viewDir), 0.0), F0, roughness);
+        vec3 kD = 1.0 - kS;
+        kD *= 1.0 - metallic;
 
-    vec3 irradiance = texture(irradianceMap, norm).rgb;
-    vec3 amDiffuse  = irradiance * albedo;
+        vec3 irradiance = texture(irradianceMap, norm).rgb;
+        vec3 amDiffuse  = irradiance * albedo;
 
-    // sample both the pre-filter map and the BRDF lut and combine them together as per the Split-Sum approximation to get the IBL specular part.
-    const float MAX_REFLECTION_LOD = 4.0;
-    vec3 R = reflect(-viewDir, norm);
-    vec3 prefilteredColor = textureLod(prefilterMap, R,  roughness * MAX_REFLECTION_LOD).rgb;    
-    vec2 brdf  = texture(brdfLUT, vec2(max(dot(norm, viewDir), 0.0), roughness)).rg;
-    vec3 amSpecular = prefilteredColor * (kS * brdf.x + brdf.y);
+        // sample both the pre-filter map and the BRDF lut and combine them together as per the Split-Sum approximation to get the IBL specular part.
+        const float MAX_REFLECTION_LOD = 4.0;
+        vec3 R = reflect(-viewDir, norm);
+        vec3 prefilteredColor = textureLod(prefilterMap, R,  roughness * MAX_REFLECTION_LOD).rgb;
+        vec2 brdf  = texture(brdfLUT, vec2(max(dot(norm, viewDir), 0.0), roughness)).rg;
+        vec3 amSpecular = prefilteredColor * (kS * brdf.x + brdf.y);
 
-    ambient = (kD * amDiffuse + amSpecular) * ao;
+        ambient = (kD * amDiffuse + amSpecular) * ao;
+    }
 
 	vec3 textureColor = pointColor + parallelColor + ambient;
 
@@ -195,9 +226,9 @@ void main()
         textureColor = vec3(pow(textureColor, vec3(1.0 / 2.2)));
     }
 
-    BrightColor = vec4(0.0, 0.0, 0.0, 1.0);
+    BrightColor = vec4(0.0, 0.0, 0.0, texColor.a);
 
-    FragColor = vec4(textureColor, 1.0);
+    FragColor = vec4(textureColor, texColor.a);
 }
 
 // parallelLight
@@ -208,7 +239,7 @@ vec3 CalParallelLight(ParallelLight parallelLight, vec3 norm, vec3 viewDir, vec3
     vec3 parallelHalfVec = normalize(parallelLightDir + viewDir);
     vec3 radiance = parallelLight.color * parallelLight.intensity;
 
-    vec3 F0 = vec3(0.04); 
+    vec3 F0 = vec3(0.04);
     vec3 albedo = texColor.rgb;
     F0 = mix(F0, albedo, metallic);
 
@@ -242,11 +273,11 @@ float ShadowCalculation(vec4 FragPosLightSpace, vec3 n)
     projCoords = projCoords * 0.5 + 0.5;
 
     // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
-    float closestDepth = texture(depthMap, projCoords.xy).r; 
+    float closestDepth = texture(depthMap, projCoords.xy).r;
     // get depth of current fragment from light's perspective
     float currentDepth = projCoords.z;
     // calculate bias (based on depth map resolution and slope)
-    vec3 lightDir = normalize(-parallelLight.direction); 
+    vec3 lightDir = normalize(-parallelLight.direction);
     float bias = max(0.01 * (1.0 - dot(n, lightDir)), 0.001);
     // check whether current frag pos is in shadow
     // float shadow = currentDepth - bias > closestDepth  ? 1.0 : 0.0;
@@ -257,20 +288,20 @@ float ShadowCalculation(vec4 FragPosLightSpace, vec3 n)
     {
         for(int y = -1; y <= 1; ++y)
         {
-            float pcfDepth = texture(depthMap, projCoords.xy + vec2(x, y) * texelSize).r; 
-            shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;        
-        }    
+            float pcfDepth = texture(depthMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;
+        }
     }
     shadow /= 9.0;
-    
+
     // keep the shadow at 0.0 when outside the far_plane region of the light's frustum.
     if(projCoords.z > 1.0)
         shadow = 0.0;
-        
+
     return shadow;
 }
 
-// pointLight	
+// pointLight
 vec3 CalPointLight(PointLight pointLight, vec3 norm, vec3 viewDir, vec3 pointLightDir, vec3 texColor, float pointShadow, float roughness, float metallic)
 {
 	float distance = length(pointLight.position - fs_in.FragPos);
@@ -279,11 +310,11 @@ vec3 CalPointLight(PointLight pointLight, vec3 norm, vec3 viewDir, vec3 pointLig
 		attenuation = 1.0 / (pointLight.constant + pointLight.linear * distance + pointLight.quadratic * (distance * distance));
 	else
 		attenuation = 1.0 / (pointLight.constant + pointLight.linear * distance);
-	
+
     vec3 pointHalfVec = normalize(pointLightDir + viewDir);
     vec3 radiance = pointLight.color * pointLight.intensity * attenuation;
 
-    vec3 F0 = vec3(0.04); 
+    vec3 F0 = vec3(0.04);
     vec3 albedo = texColor.rgb;
     F0 = mix(F0, albedo, metallic);
 
@@ -344,29 +375,29 @@ vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir)
 	// number of depth layers
     const float minLayers = 10;
     const float maxLayers = 20;
-    float numLayers = mix(maxLayers, minLayers, abs(dot(vec3(0.0, 0.0, 1.0), viewDir)));  
+    float numLayers = mix(maxLayers, minLayers, abs(dot(vec3(0.0, 0.0, 1.0), viewDir)));
     // calculate the size of each layer
     float layerDepth = 1.0 / numLayers;
     // depth of current layer
     float currentLayerDepth = 0.0;
     // the amount to shift the texture coordinates per layer (from vector P)
-    vec2 P = viewDir.xy / viewDir.z * height_scale; 
+    vec2 P = viewDir.xy / viewDir.z * height_scale;
     vec2 deltaTexCoords = P / numLayers;
-  
+
     // get initial values
     vec2  currentTexCoords     = texCoords;
     float currentDepthMapValue = texture(height, currentTexCoords).r;
-      
+
     while(currentLayerDepth < currentDepthMapValue)
     {
         // shift texture coordinates along direction of P
         currentTexCoords -= deltaTexCoords;
         // get depthmap value at current texture coordinates
-        currentDepthMapValue = texture(height, currentTexCoords).r;  
+        currentDepthMapValue = texture(height, currentTexCoords).r;
         // get depth of next layer
-        currentLayerDepth += layerDepth;  
+        currentLayerDepth += layerDepth;
     }
-    
+
     // -- parallax occlusion mapping interpolation from here on
     // get texture coordinates before collision (reverse operations)
     vec2 prevTexCoords = currentTexCoords + deltaTexCoords;
@@ -374,7 +405,7 @@ vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir)
     // get depth after and before collision for linear interpolation
     float afterDepth  = currentDepthMapValue - currentLayerDepth;
     float beforeDepth = texture(height, prevTexCoords).r - currentLayerDepth + layerDepth;
- 
+
     // interpolation of texture coordinates
     float weight = afterDepth / (afterDepth - beforeDepth);
     vec2 finalTexCoords = prevTexCoords * weight + currentTexCoords * (1.0 - weight);

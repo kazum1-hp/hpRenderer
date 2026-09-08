@@ -334,6 +334,9 @@ aiMaterial *MMDImporter::CreateMaterial(const pmx::PmxMaterial *pMat,
 
     float opacity = pMat->diffuse[3];
     mat->AddProperty(&opacity, 1, AI_MATKEY_OPACITY);
+    // hpRenderer: preserve PMX material flag bit 0 (double-sided drawing).
+    const int twoSided = (pMat->flag & 0x01) != 0 ? 1 : 0;
+    mat->AddProperty(&twoSided, 1, AI_MATKEY_TWOSIDED);
     float shininess = pMat->specularlity;
     mat->AddProperty(&shininess, 1, AI_MATKEY_SHININESS_STRENGTH);
 

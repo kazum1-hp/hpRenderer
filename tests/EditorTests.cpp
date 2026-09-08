@@ -1,10 +1,15 @@
-#include "Editor/EditorLayer.h"
-#include "Scene.h"
-#include "InputManager.h"
-#include "FrameBuffer.h"
-#include "RenderSettings.h"
+#include "hpr/editor/EditorLayer.h"
+#include "hpr/assets/AssetManager.h"
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include "hpr/scene/Scene.h"
+#include "hpr/core/InputManager.h"
+#include "hpr/renderer/opengl/FrameBuffer.h"
+#include "hpr/renderer/RenderSettings.h"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "ImGuiFileDialog.h"
+#include "ModelImportFixtures.h"
 #include <iostream>
 #include <stdexcept>
 
@@ -37,6 +42,12 @@ namespace
             settings.postProcess.enabled = true;
             settings.drawLights = true;
             if (gpu) editor.beginFrame(); else ImGui::NewFrame();
+            if (gpu)
+            {
+                ImGui::Begin("Unicode font smoke");
+                ImGui::TextUnformatted(u8"\u4e2d\u6587\u6a21\u578b / \u89d2\u8272.FBX");
+                ImGui::End();
+            }
             editor.draw(scene, settings, output, input, [] {});
             if (gpu) editor.endFrame(); else ImGui::Render();
             require(ImGui::GetDrawData() != nullptr, "missing editor draw data");
@@ -63,7 +74,8 @@ namespace
         int width = 0, height = 0;
         io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
         {
-            EditorLayer editor;
+            AssetManager resources;
+            EditorLayer editor(resources);
             drawFrames(editor, false, 42);
 
             Camera camera;
@@ -123,7 +135,8 @@ namespace
         scene.AddObject(nullptr);
         scene.GetObjects()[1].material.aoBias = 0.7f;
         {
-            AssetPanel assets;
+            AssetManager resources;
+            AssetPanel assets(resources);
             RenderSettingsPanel settingsPanel;
             for (int frame = 0; frame < 8; ++frame)
             {
@@ -181,7 +194,8 @@ namespace
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         for (int cycle = 0; cycle < 2; ++cycle)
         {
-            EditorLayer editor;
+            AssetManager resources;
+            EditorLayer editor(resources);
             editor.initialize(window);
             ImGui::GetIO().IniFilename = nullptr;
             drawFrames(editor, true, framebuffer.getColor());
@@ -201,6 +215,31 @@ int main(int argc, char** argv)
     int result = 0;
     try
     {
+        {
+            ModelImportFixtures fixture;
+            const auto directory = fixture.directory / std::filesystem::u8path(u8"\u4e2d\u6587\u6a21\u578b \u30c6\u30b9\u30c8");
+            std::filesystem::create_directory(directory);
+            const auto file = directory / std::filesystem::u8path(u8"\u89d2\u8272.FBX");
+            { std::ofstream stream(file); stream << "fixture"; }
+            IGFD::FileManager manager;
+            auto* fs = manager.GetFileSystemInstance();
+            require(manager.GetFileSystemName() == "FileSystemStd", "Unicode dialog backend is not enabled");
+            require(fs->IsDirectoryCanBeOpened(directory.u8string()) && fs->IsFileExist(file.u8string()),
+                    "dialog cannot access Unicode paths");
+            bool found = false;
+            for (const auto& entry : fs->ScanDirectory(directory.u8string()))
+            {
+                if (entry.fileNameExt != file.filename().u8string()) continue;
+                found = true;
+                std::string date;
+                size_t size = 0;
+                fs->GetFileDateAndSize(file.u8string(), entry.fileType, date, size);
+                require(size == 7 && !date.empty(), "Unicode file metadata lookup failed");
+            }
+            require(found, "dialog changed Unicode filename encoding");
+            const auto parsed = fs->ParsePathFileName(file.u8string());
+            require(parsed.isOk && parsed.name == file.filename().u8string(), "Unicode selected path parsing");
+        }
         if (gpu)
         {
             require(glfwInit() == GLFW_TRUE, "GLFW initialization");

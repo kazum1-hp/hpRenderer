@@ -1,7 +1,7 @@
-#include "Renderer.h"
-#include "Scene.h"
-#include "InputManager.h"
-#include "Editor/ConsoleCapture.h"
+#include "hpr/renderer/Renderer.h"
+#include "hpr/scene/Scene.h"
+#include "hpr/core/InputManager.h"
+#include "hpr/editor/ConsoleCapture.h"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>

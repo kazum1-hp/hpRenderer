@@ -635,7 +635,7 @@ public:
     void GetFileDateAndSize(const std::string& vFilePathName, const IGFD::FileType& vFileType, std::string& voDate, size_t& voSize) override {
         namespace fs = std::filesystem;
         try {
-            fs::path fpath(vFilePathName);
+            const auto fpath = stringToPath(vFilePathName);
             // date
             size_t len{};
             const auto lastWriteTime = fs::last_write_time(fpath);

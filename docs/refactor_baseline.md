@@ -1,5 +1,10 @@
 # Renderer Refactor Baseline
 
+This is the chronological refactor record; paths/type names in earlier stages
+describe those stages. For the current module layout, CPU/GPU ownership,
+six-image skybox and PBR material editor, see
+[current architecture](project_architecture_zh.md).
+
 This document defines the behavior that must remain stable while the renderer
 and editor are separated. Run the automated test and complete the manual smoke
 matrix after every refactor stage.
@@ -266,6 +271,60 @@ The renderer_gpu check additionally exercises:
 Debug build and all ten locally enabled CTest checks passed after this extraction.
 Full-scene visual parity and editor interaction acceptance still require the
 manual smoke matrix below; synthetic pixel tests do not replace that acceptance.
+
+## Explicit asset ownership and cache identity
+
+The ResourceManager singleton used in the earlier stages has been replaced by an
+Application-owned AssetManager. Renderer/IBL and editor dependencies are passed
+explicitly. Application declares Window before AssetManager and Scene so normal
+destruction and constructor-exception unwinding release GPU assets before the
+context. Explicit shutdown still clears editor, renderer, Scene and asset caches
+in that order. AssetManager's public header does not import GL, GLFW or ImGui.
+
+- TextureKey contains an absolute, lexically normalized filesystem path, texture
+  semantic and color space. UTF-8 input paths are preserved. Relative/absolute
+  spellings and dot segments share cache entries; case aliases and symlink aliases
+  are not unified. Models and environment selections use the same path policy.
+- Diffuse textures default to sRGB; other existing semantics default to linear.
+  Callers can explicitly request either color space. GPU storage follows that
+  choice; HDR is always linear and rejects an sRGB request. Grayscale color
+  textures are expanded for sRGB storage. Upload handles tightly packed odd-width
+  rows and restores texture bindings and the unpack state it changes.
+- Failed texture/model loads are not cached. Failed reloads retain valid cached
+  resources. Texture reload replaces only the requested variant; existing Mesh
+  holders retain their texture until rebound/reloaded. Model reload replaces
+  geometry transactionally inside the shared Model instance.
+- Model receives TextureLoader during construction/reload, passes it through the
+  import helpers, and retains no service reference. Its former path-only local
+  texture cache was removed; all requests use AssetManager's composite identity.
+- Rendering/PrimitiveMeshes creates caller-owned Quad, Plane and Cube meshes.
+  RenderPipeline supplies the default plane textures through AssetManager.
+  CubemapMath is a CPU-only utility shared by lights and IBL. Neither belongs to
+  the asset cache; Renderer and IBL own their generated primitive meshes.
+- ShaderId identifies the fixed built-in shader roles at compile time. Asset
+  loading, passes, IBL, editor reload labels and tests use these IDs. Display names
+  remain strings via ShaderName. Source paths, GLSL compilation/linking, missing
+  registrations and uniform names still require runtime validation. Invalid
+  initial linked programs are not inserted into the shader cache.
+
+Additional checks are asset_cache (no context) and asset_cache_gpu (opt-in hidden
+context). They cover typed lookup, cache-key separation, path normalization,
+two independent managers, odd-width texture readback, real GPU color formats,
+model material semantics, failed-load recovery, transactional reload and lifetime
+isolation. Existing editor, renderer and IBL tests now use local manager instances.
+Debug build, all twelve locally enabled CTest checks and git diff --check passed.
+Full-scene loading/reloading and visual acceptance remain in the matrix below.
+
+## Static model import follow-up
+
+Model import now has a CPU-only AssimpModelImporter/ModelAsset target, private GPU
+meshes, retained node references/transforms, basic PBR/alpha/double-sided materials
+and embedded glTF/GLB images. The editor accepts glTF, GLB, OBJ and PMX; .blend is
+converted in Blender. Animation evaluation is deliberately not implemented.
+
+See [model import architecture and limits](model_import_architecture.md) and the
+[Chinese Blender conversion manual](blender_model_import_zh.md). Two additional
+CPU/GPU regression targets bring the locally enabled CTest suite to fourteen.
 
 ## Manual rendering smoke matrix
 

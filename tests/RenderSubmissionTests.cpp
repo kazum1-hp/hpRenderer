@@ -1,12 +1,12 @@
-#include "Renderer.h"
-#include "RenderExtraction.h"
+#include "hpr/renderer/Renderer.h"
+#include "hpr/renderer/RenderExtraction.h"
 
 #if defined(_glfw3_h_) || defined(IMGUI_VERSION)
 #error Renderer public API must not depend on GLFW or ImGui
 #endif
 
-#include "Scene.h"
-#include "Camera.h"
+#include "hpr/scene/Scene.h"
+#include "hpr/scene/Camera.h"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>

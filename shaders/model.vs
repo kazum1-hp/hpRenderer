@@ -29,8 +29,8 @@ void main()
 	mat3 normalMatrix = transpose(inverse(mat3(model)));
 	vs_out.Normal = normalMatrix * aNormal;
 	
-	vs_out.Tangent = vec3(normalMatrix * aTangent);
-	vs_out.Bitangent = vec3(normalMatrix * aBitangent);
+    vs_out.Tangent = mat3(model) * aTangent;
+    vs_out.Bitangent = mat3(model) * aBitangent;
 
     vs_out.TexCoords = aTexCoord;
 

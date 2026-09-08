@@ -1,6 +1,9 @@
-#include "IBLCache.h"
-#include "ResourceManager.h"
-#include "Scene.h"
+#include "hpr/renderer/ibl/IBLCache.h"
+#include "hpr/assets/AssetManager.h"
+#include "hpr/renderer/opengl/Shader.h"
+#include "hpr/renderer/opengl/Texture.h"
+#include <GLFW/glfw3.h>
+#include "hpr/scene/Scene.h"
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -88,13 +91,14 @@ namespace
         Fixtures fixtures;
         fixtures.hdr("a.hdr");
         fixtures.hdr("b.hdr", 64);
-        auto& resources = ResourceManager::GetInstance();
+        AssetManager resources;
         const std::string shaders = std::string(HPRENDERER_SOURCE_DIR) + "/shaders/";
-        for (const char* name : {"skybox", "irradiance", "prefilter", "brdf"})
+        for (ShaderId id : {ShaderId::EnvironmentCapture, ShaderId::Irradiance, ShaderId::Prefilter, ShaderId::Brdf})
         {
+            const char* name = ShaderName(id);
             for (const char* extension : {".vs", ".fs"})
                 std::filesystem::copy_file(shaders + name + extension, fixtures.directory / (std::string(name) + extension));
-            resources.LoadShader(name, fixtures.path((std::string(name) + ".vs").c_str()),
+            resources.LoadShader(id, fixtures.path((std::string(name) + ".vs").c_str()),
                 fixtures.path((std::string(name) + ".fs").c_str()));
         }
         IBLCache cache({16, 2, 16, 5, 8});
@@ -164,7 +168,7 @@ namespace
             "failed HDR reload destroyed prior resources");
 
         // A failed bake must retain the last complete maps without retrying every frame.
-        auto prefilter = resources.GetShader("prefilter");
+        auto prefilter = resources.GetShader(ShaderId::Prefilter);
         const GLuint savedProgram = prefilter->ID;
         prefilter->ID = 0;
         auto failed = cache.prepare(a);
@@ -177,7 +181,7 @@ namespace
         const auto brdfPath = fixtures.directory / "brdf.fs";
         std::filesystem::last_write_time(brdfPath,
             std::filesystem::last_write_time(brdfPath) + std::chrono::seconds(2));
-        require(resources.GetShader("brdf")->reload(), "BRDF shader reload failed");
+        require(resources.GetShader(ShaderId::Brdf)->reload(), "BRDF shader reload failed");
         auto newBrdf = cache.prepare(a);
         require(valid(newBrdf) && newBrdf.brdfLUT != recovered.brdfLUT, "BRDF reload did not invalidate LUT");
         require(cache.prepare(b).brdfLUT == newBrdf.brdfLUT, "new LUT not shared");
@@ -224,7 +228,6 @@ int main()
     }
     if (window)
     {
-        ResourceManager::GetInstance().Clear();
         glfwDestroyWindow(window);
     }
     glfwTerminate();

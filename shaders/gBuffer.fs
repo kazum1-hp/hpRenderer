@@ -18,6 +18,23 @@ uniform sampler2D specular;
 uniform sampler2D normal;
 uniform sampler2D height;
 uniform sampler2D arm;
+uniform vec4 baseColorFactor;
+uniform float roughnessFactor;
+uniform float metallicFactor;
+uniform int alphaMode;
+uniform float alphaCutoff;
+uniform bool doubleSided;
+uniform bool hasDiffuseMap;
+uniform bool hasOpacityMap;
+uniform bool hasAOMap;
+uniform bool hasRoughnessMap;
+uniform bool hasMetallicMap;
+uniform sampler2D opacityMap;
+uniform sampler2D aoMap;
+uniform sampler2D roughnessMap;
+uniform sampler2D metallicMap;
+uniform int roughnessChannel;
+uniform int metallicChannel;
 
 uniform bool hasNormalMap;
 uniform bool hasARMMap;
@@ -27,6 +44,26 @@ uniform float roughnessBias;
 uniform float metallicBias;
 
 uniform vec3 viewPos;
+
+vec4 surfaceColor(vec2 uv)
+{
+    vec4 color = baseColorFactor * (hasDiffuseMap ? texture(diffuse, uv) : vec4(1.0));
+    if (hasOpacityMap) color.a *= texture(opacityMap, uv).r;
+    if (alphaMode == 1 && color.a < alphaCutoff) discard;
+    if (alphaMode == 2 && color.a <= 0.001) discard;
+    if (alphaMode != 2) color.a = 1.0;
+    return color;
+}
+
+vec3 surfaceARM(vec2 uv)
+{
+    vec3 value = vec3(1.0, roughnessFactor, metallicFactor);
+    if (hasARMMap) value = texture(arm, uv).rgb; // Legacy built-in packed ARM.
+    if (hasAOMap) value.r = texture(aoMap, uv).r;
+    if (hasRoughnessMap) value.g = texture(roughnessMap, uv)[roughnessChannel] * roughnessFactor;
+    if (hasMetallicMap) value.b = texture(metallicMap, uv)[metallicChannel] * metallicFactor;
+    return clamp(value + vec3(aoBias, roughnessBias, metallicBias), vec3(0.0, 0.04, 0.0), vec3(1.0));
+}
 
 void main()
 {    
@@ -51,27 +88,15 @@ void main()
 		norm = normalize(TBN * normalTex);
 	}
 
+    if (doubleSided && !gl_FrontFacing) { N = -N; norm = -norm; }
     // position
     gPosition = fs_in.FragPos;
     // normal (used for lighting)
     gNormal = norm;
     // albedo
-    gAlbedo = texture(diffuse, texCoords).rgb;
+    gAlbedo = surfaceColor(texCoords).rgb;
 
-    // ORM: occlusion, roughness, metallic
-    float ao = 1.0;
-    float roughness = 0.5;
-    float metallic = 0.0;
-
-    if (hasARMMap)
-    {
-        vec3 armVal = texture(arm, texCoords).rgb;
-        ao = clamp(armVal.r + aoBias, 0.01, 1.0);
-        roughness = clamp(armVal.g + roughnessBias, 0.01, 1.0);
-        metallic = clamp(armVal.b + metallicBias, 0.01, 1.0);
-    }
-
-    gARM = vec3(ao, roughness, metallic);
+    gARM = surfaceARM(texCoords);
 
     // shadow calculate normal
     gGeoNormal = N;

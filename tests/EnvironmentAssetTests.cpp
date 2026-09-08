@@ -1,4 +1,4 @@
-#include "EnvironmentAsset.h"
+#include "hpr/assets/EnvironmentAsset.h"
 #include <memory>
 #include <type_traits>
 

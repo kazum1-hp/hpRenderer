@@ -1,6 +1,6 @@
-#include "Scene.h"
-#include "RenderSettings.h"
-#include "RenderTypes.h"
+#include "hpr/scene/Scene.h"
+#include "hpr/renderer/RenderSettings.h"
+#include "hpr/renderer/RenderTypes.h"
 
 #include <cmath>
 #include <iostream>
@@ -27,7 +27,8 @@ namespace
     void objectLifecyclePreservesObjectState()
     {
         Scene scene;
-        auto material = std::make_shared<Material>("baseline material");
+        MaterialInstance material;
+        material.roughnessBias = 0.25f;
 
         scene.AddObject(
             nullptr,
@@ -39,7 +40,7 @@ namespace
 
         const RenderObject& object = scene.GetObjects().front();
         expect(
-            object.material.baseMaterial == material,
+            object.material.roughnessBias == material.roughnessBias,
             "AddObject should preserve the material association");
 
         const glm::mat4 model = object.transform.getModelMatrix();
@@ -79,8 +80,8 @@ namespace
     void materialInstancesFollowTheirObjects()
     {
         Scene scene;
-        auto firstMaterial = std::make_shared<Material>("first material");
-        auto secondMaterial = std::make_shared<Material>("second material");
+        MaterialInstance firstMaterial;
+        MaterialInstance secondMaterial;
 
         scene.AddObject(nullptr, glm::vec3(1.0f), glm::vec3(1.0f), firstMaterial);
         scene.AddObject(nullptr, glm::vec3(2.0f), glm::vec3(1.0f), secondMaterial);
@@ -96,9 +97,6 @@ namespace
         expect(scene.GetObjects().size() == 1, "one object should remain after removal");
 
         const MaterialInstance& remaining = scene.GetObjects().front().material;
-        expect(
-            remaining.baseMaterial == secondMaterial,
-            "material ownership should follow the surviving object");
         expect(nearlyEqual(remaining.aoBias, 0.75f), "AO bias should follow the surviving object");
         expect(
             nearlyEqual(remaining.roughnessBias, 0.5f),
@@ -110,7 +108,6 @@ namespace
 
         scene.AddObject(nullptr);
         const MaterialInstance& defaults = scene.GetObjects().back().material;
-        expect(!defaults.baseMaterial, "a new object should not invent a base material");
         expect(nearlyEqual(defaults.aoBias, 0.0f), "a new object should start with zero AO bias");
         expect(
             nearlyEqual(defaults.roughnessBias, 0.0f),
@@ -118,7 +115,7 @@ namespace
         expect(
             nearlyEqual(defaults.metallicBias, 0.0f),
             "a new object should start with zero metallic bias");
-        expect(!defaults.useNormalMap, "normal mapping should preserve its previous default-off behavior");
+        expect(defaults.useNormalMap, "imported normal maps should be enabled by default");
     }
 
     void renderStateDefaultsPreserveCurrentBehavior()
