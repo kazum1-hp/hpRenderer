@@ -55,3 +55,10 @@ Thumbs.db
 # ImGui (optional settings)
 # ========================
 imgui.ini
+
+# Local/private downloads and generated release packages (not existing tracked assets)
+/assets/local/
+/dist/
+/_install/
+/_packages/
+/_CPack_Packages/

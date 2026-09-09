@@ -1,8 +1,18 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.22)
 
 project(hpRenderer)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Keep the supported Windows distribution self-contained (apart from the MSVC runtime).
+# In particular, Assimp otherwise defaults to a shared library on a fresh checkout.
+set(BUILD_SHARED_LIBS OFF)
+set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "Use bundled zlib" FORCE)
+if(NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+endif()
 
 include(CTest)
 
@@ -10,6 +20,7 @@ include(CTest)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(third_party/glfw)
 
@@ -30,8 +41,12 @@ target_include_directories(glad PUBLIC
 )
 
 # ================= IMGUI =================
-file(GLOB IMGUI_SRC
-    third_party/imgui/*.cpp
+set(IMGUI_SRC
+    third_party/imgui/imgui.cpp
+    third_party/imgui/imgui_draw.cpp
+    third_party/imgui/imgui_tables.cpp
+    third_party/imgui/imgui_widgets.cpp
+    third_party/imgui/imgui_demo.cpp
     third_party/imgui/backends/imgui_impl_glfw.cpp
     third_party/imgui/backends/imgui_impl_opengl3.cpp
 )
@@ -86,6 +101,7 @@ target_link_libraries(hpRenderer_opengl PUBLIC hpRenderer_import glad opengl32)
 add_library(hpRenderer_core STATIC
     src/core/Window.cpp
     src/core/InputManager.cpp
+    src/core/RuntimePaths.cpp
     src/scene/Light.cpp
     src/scene/Camera.cpp
     src/assets/AssetManager.cpp
@@ -122,7 +138,7 @@ add_library(hpRenderer_editor STATIC
 target_link_libraries(hpRenderer_editor PUBLIC hpRenderer_core PRIVATE imgui ImGuiFileDialog)
 
 file(GLOB_RECURSE HEADER_FILES CONFIGURE_DEPENDS include/hpr/*.h)
-file(GLOB SHADER_FILES shaders/*)
+file(GLOB SHADER_FILES CONFIGURE_DEPENDS shaders/*)
 add_executable(hpRenderer src/app/main.cpp src/app/Application.cpp ${HEADER_FILES} ${SHADER_FILES})
 target_link_libraries(hpRenderer PRIVATE hpRenderer_editor)
 source_group("Header Files" FILES ${HEADER_FILES})
@@ -136,12 +152,14 @@ add_custom_command(TARGET hpRenderer POST_BUILD
             ${CMAKE_BINARY_DIR}/shaders
 )
 
-# assets
-file(COPY assets DESTINATION ${CMAKE_BINARY_DIR})
+include(cmake/RuntimeBundle.cmake)
 # ================= TESTS =================
 # These tests deliberately avoid creating an OpenGL context. They protect the
 # scene-level behavior that the renderer refactor will move between modules.
 if(BUILD_TESTING)
+    add_executable(hpRenderer_startup_asset_tests tests/StartupAssetTests.cpp src/core/RuntimePaths.cpp)
+    target_link_libraries(hpRenderer_startup_asset_tests PRIVATE hpRenderer_import)
+    add_test(NAME startup_assets COMMAND hpRenderer_startup_asset_tests "${PROJECT_BINARY_DIR}/assets")
     add_executable(hpRenderer_cpu_asset_tests tests/CpuAssetBoundaryTests.cpp src/scene/Light.cpp)
     target_link_libraries(hpRenderer_cpu_asset_tests PRIVATE hpRenderer_import)
     add_test(NAME cpu_asset_boundary COMMAND hpRenderer_cpu_asset_tests)

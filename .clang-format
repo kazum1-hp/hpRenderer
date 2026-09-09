@@ -1,0 +1,13 @@
+BasedOnStyle: Microsoft
+Language: Cpp
+Standard: c++17
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+NamespaceIndentation: None
+AccessModifierOffset: -4
+PointerAlignment: Left
+ReferenceAlignment: Left
+SortIncludes: Never
+DerivePointerAlignment: false

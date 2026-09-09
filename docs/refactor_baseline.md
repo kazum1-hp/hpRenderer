@@ -2,8 +2,8 @@
 
 This is the chronological refactor record; paths/type names in earlier stages
 describe those stages. For the current module layout, CPU/GPU ownership,
-six-image skybox and PBR material editor, see
-[current architecture](project_architecture_zh.md).
+six-image skybox and PBR bias controls, see
+[current architecture](architecture.md) and [Chinese usage notes](project_architecture_zh.md).
 
 This document defines the behavior that must remain stable while the renderer
 and editor are separated. Run the automated test and complete the manual smoke

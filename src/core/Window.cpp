@@ -1,12 +1,13 @@
 #include "hpr/core/Window.h"
 #include <iostream>
+#include <stdexcept>
 
 
 Window::Window(const char* title, InputManager& inputManager, int width, int height)
 	: input(inputManager), SCR_WIDTH(width), SCR_HEIGHT(height)
 {
 	if (!glfwInit()) {
-		std::cerr << "Failed to initialize GLFW." << std::endl;
+		throw std::runtime_error("Failed to initialize GLFW; check your Windows graphics driver");
 	}
 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -17,23 +18,23 @@ Window::Window(const char* title, InputManager& inputManager, int width, int hei
 
 	window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, title, NULL, NULL);
 	if (window == NULL) {
-		std::cerr << "Failed to create GLFW window." << std::endl;
 		glfwTerminate();
+		throw std::runtime_error("Cannot create an OpenGL 3.3 window; install a compatible graphics driver");
 	}
 
 	// get primary monitor and set init window pos
 	GLFWmonitor* primary = glfwGetPrimaryMonitor();
-	const GLFWvidmode* mode = glfwGetVideoMode(primary);
-
-	int xpos = (mode->width - SCR_WIDTH) / 2;
-	int ypos = (mode->height - SCR_HEIGHT) / 2;
-
-	glfwSetWindowPos(window, xpos, ypos);
+	const GLFWvidmode* mode = primary ? glfwGetVideoMode(primary) : nullptr;
+	if (mode)
+		glfwSetWindowPos(window, (mode->width - SCR_WIDTH) / 2, (mode->height - SCR_HEIGHT) / 2);
 
 	glfwMakeContextCurrent(window);
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-		std::cerr << "Failed to initialize GLAD." << std::endl;
+		glfwDestroyWindow(window);
+		window = nullptr;
+		glfwTerminate();
+		throw std::runtime_error("Failed to load OpenGL functions");
 	}
 
 	glViewport(0, 0, static_cast<GLsizei>(SCR_WIDTH), static_cast<GLsizei>(SCR_HEIGHT));

@@ -1,0 +1,22 @@
+# Run after a Release install. Model dependency decoding is a separate CPU test.
+if(NOT DEFINED BUNDLE_DIR)
+    message(FATAL_ERROR "Pass -DBUNDLE_DIR=<installed-package-directory>")
+endif()
+foreach(file IN ITEMS bin/hpRenderer.exe bin/msvcp140.dll bin/vcruntime140.dll
+        README.md LICENSE licenses/README.md assets/hdr/newport_loft.hdr)
+    if(NOT EXISTS "${BUNDLE_DIR}/${file}")
+        message(FATAL_ERROR "Incomplete runtime package: ${file}")
+    endif()
+endforeach()
+foreach(shader IN ITEMS model light framebuffer skybox shadow pointShadow bloomBlur
+        gBuffer lightPass debug drawDebug background irradiance prefilter brdf)
+    foreach(extension IN ITEMS vs fs)
+        if(NOT EXISTS "${BUNDLE_DIR}/shaders/${shader}.${extension}")
+            message(FATAL_ERROR "Missing shader: ${shader}.${extension}")
+        endif()
+    endforeach()
+endforeach()
+if(NOT EXISTS "${BUNDLE_DIR}/shaders/pointShadow.gs")
+    message(FATAL_ERROR "Missing point-shadow geometry shader")
+endif()
+message(STATUS "Standalone runtime files validated")

@@ -3,6 +3,7 @@
 #include "hpr/assets/Model.h"
 
 #include <iostream>
+#include <stdexcept>
 
 Application::Application(const char* title)
 	: camera(),
@@ -53,15 +54,21 @@ void Application::init()
 	res.LoadShader(ShaderId::Prefilter, "../shaders/prefilter.vs", "../shaders/prefilter.fs");
 	res.LoadShader(ShaderId::Brdf, "../shaders/brdf.vs", "../shaders/brdf.fs");
 
-	auto model = res.LoadModel("../assets/models/blue_metal_plate_4k.gltf/blue_metal_plate_4k.gltf");
-	auto model2 = res.LoadModel("../assets/models/metal_office_desk_4k/metal_office_desk_4k.gltf");
 	auto model3 = res.LoadModel("../assets/models/marble_bust_01_4k/marble_bust_01_4k.gltf");
 
 	auto envAsset = res.LoadEnvironment("../assets/hdr/newport_loft.hdr");
+    if (!model3 || !envAsset) throw std::runtime_error("Required startup model or HDR is missing");
 
-	mainScene.AddObject(model, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.5f));
-	mainScene.AddObject(model2, glm::vec3(0.0f, -5.5f, 0.0f), glm::vec3(5.0f));
-	mainScene.AddObject(model3, glm::vec3(-3.0f, -1.5f, 0.0f), glm::vec3(5.0f));
+#ifdef HPRENDERER_FULL_DEMO
+    auto model = res.LoadModel("../assets/models/blue_metal_plate_4k.gltf/blue_metal_plate_4k.gltf");
+    auto model2 = res.LoadModel("../assets/models/metal_office_desk_4k/metal_office_desk_4k.gltf");
+    if (!model || !model2) throw std::runtime_error("Full demo model assets are missing");
+    mainScene.AddObject(model, glm::vec3(0.0f), glm::vec3(0.5f));
+    mainScene.AddObject(model2, glm::vec3(0.0f, -5.5f, 0.0f), glm::vec3(5.0f));
+    mainScene.AddObject(model3, glm::vec3(-3.0f, -1.5f, 0.0f), glm::vec3(5.0f));
+#else
+    mainScene.AddObject(model3, glm::vec3(0.0f, -1.5f, 0.0f), glm::vec3(5.0f));
+#endif
 
 	mainScene.AddPointLight(Light(glm::vec3(2.0f, 2.0f, 2.0f), 1.0f, glm::vec3(0.0f, 0.5f, 1.5f), LightType::Point));
 	mainScene.AddPointLight(Light(glm::vec3(2.0f, 2.0f, 2.0f), 1.0f, glm::vec3(-4.0f, 0.5f, -3.0f), LightType::Point));

@@ -1,5 +1,8 @@
 # 当前项目结构与使用说明
 
+完整的 pass 顺序和资源生命周期见 [architecture.md](architecture.md)；
+默认演示、全量场景开关、Windows CI 和打包方式见 [仓库说明](repository.md)。
+
 ## 目录与依赖
 
 ```text

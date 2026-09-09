@@ -1,0 +1,54 @@
+name: Windows build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configure (vendored dependencies, no downloads)
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON -DHPRENDERER_GPU_TESTS=OFF
+      - name: Build application and tests
+        run: cmake --build build --config ${{ matrix.configuration }} --parallel 4
+      - name: CPU regression tests
+        run: ctest --test-dir build -C ${{ matrix.configuration }} --output-on-failure
+      # Standard hosted runners do not guarantee a usable OpenGL 3.3 context.
+      # GPU test executables are compiled above, but execution is an explicit local opt-in.
+      - name: Stage and validate the standalone runtime
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: |
+          cmake --install build --config Release --component Runtime --prefix dist/staged
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./build/Release/hpRenderer_startup_asset_tests.exe dist/staged/assets
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake -DBUNDLE_DIR=dist/staged -P cmake/ValidateRuntimeBundle.cmake
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cpack --config build/CPackConfig.cmake -C Release -B dist
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Expand-Archive dist/hpRenderer-windows-x64.zip -DestinationPath dist/extracted
+          ./build/Release/hpRenderer_startup_asset_tests.exe dist/extracted/hpRenderer-windows-x64/assets
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake -DBUNDLE_DIR=dist/extracted/hpRenderer-windows-x64 -P cmake/ValidateRuntimeBundle.cmake
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload runnable ZIP (not a published Release)
+        if: matrix.configuration == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hpRenderer-windows-x64
+          path: dist/hpRenderer-windows-x64.zip
+          if-no-files-found: error
