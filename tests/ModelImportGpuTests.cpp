@@ -39,6 +39,7 @@ void run()
     for (const auto& entry : {std::pair<ShaderId, const char*>{ShaderId::Model, "model"},
                               {ShaderId::GBuffer, "gBuffer"},
                               {ShaderId::DeferredLighting, "lightPass"},
+                              {ShaderId::ToneMapping, "framebuffer"},
                               {ShaderId::DirectionalShadow, "shadow"}})
         assets.LoadShader(entry.first, root + "/shaders/" + entry.second + ".vs",
                           root + "/shaders/" + entry.second + ".fs");
@@ -48,6 +49,7 @@ void run()
     Rendering::GBufferPass gbuffer(assets);
     Rendering::DeferredLightingPass lighting(assets);
     Rendering::ShadowPass shadow(assets);
+    Rendering::ToneMappingPass toneMapping(assets);
     RenderTargets targets;
     targets.initialize({64, 64}, 64, ColorFormat::RGBA16F);
     auto plane = Rendering::CreatePlane();
@@ -148,8 +150,10 @@ void run()
                      false);
     importRequire(reloadModel(), "reload blended model");
     for (bool deferred : {false, true})
+    for (bool post : {false, true})
     {
         settings.deferred = deferred;
+        settings.postProcess.enabled = post;
         auto& target = deferred ? *targets.deferredLighting : *targets.hdr;
         if (deferred)
         {
@@ -159,6 +163,10 @@ void run()
         }
         else
             forward.execute(scene, context, shadows, target, *plane);
+        // A non-black HDR background exposes blend-after-tone-map errors.
+        glBindFramebuffer(GL_FRAMEBUFFER, target.getFBO());
+        const float background[] = {2.0f, 0.25f, 0.5f, 1.0f};
+        glClearBufferfv(GL_COLOR, 0, background);
         const auto before = pixel(target, 0);
         const float oldDepth = depth(target);
         forward.execute(scene, context, shadows, target, *plane, Rendering::ForwardPhase::Transparent);
@@ -167,6 +175,15 @@ void run()
                       "transparent forward overlay did not alpha-composite in linear light");
         importRequire(std::abs(depth(target) - oldDepth) < .001f && !glIsEnabled(GL_BLEND),
                       "transparent pass wrote depth or leaked blend state");
+        toneMapping.execute(context, target.getColor(), 0, *targets.finalOutput, *quad);
+        const auto displayed = pixel(*targets.finalOutput, 0);
+        for (int c = 0; c < 3; ++c)
+        {
+            const float linear = (opaque[c] + background[c]) * .5f;
+            const float expected = std::pow(linear / (linear + 1.0f), 1.0f / 2.2f);
+            importRequire(std::abs(displayed[c] - expected) < .012f,
+                          "display conversion must follow linear transparent composition in every mode");
+        }
     }
     const auto vao = model->mesh(0).getVAO();
     fixture.text("triangle.gltf", "broken");

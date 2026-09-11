@@ -73,7 +73,7 @@ class SkyboxPass
   public:
     explicit SkyboxPass(AssetManager &resources);
     void restoreShaderBindings();
-    void execute(const RenderPassContext &context, const FrameBuffer &output, const Mesh &cube, bool usePost);
+    void execute(const RenderPassContext &context, const FrameBuffer &output, const Mesh &cube);
 
   private:
     std::shared_ptr<Shader> backgroundShader;

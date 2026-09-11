@@ -5,17 +5,12 @@ in vec3 WorldPos;
 
 uniform samplerCube environmentMap;
 
-uniform bool usePost;
 
 void main()
 {		
     vec3 envColor = texture(environmentMap, WorldPos).rgb;
     
-    if (!usePost)
-    {   // HDR tonemap and gamma correct
-        envColor = envColor / (envColor + vec3(1.0));
-        envColor = pow(envColor, vec3(1.0/2.2));
-    }
+    // Display conversion is performed once, after scene composition.
     
     FragColor = vec4(envColor, 1.0);
     BrightColor = vec4(0.0, 0.0, 0.0, 1.0);

@@ -31,12 +31,11 @@ void RenderTargets::initialize(RenderExtent extent, unsigned int shadowSize, Col
     replacement.deferredLighting = std::make_unique<FrameBuffer>(desc);
 
     desc.colors = { {ColorFormat::RGB8} };
+    desc.depth.reset(); // Fullscreen output and bloom never use depth.
     desc.debugName = "Final Output";
     replacement.finalOutput = std::make_unique<FrameBuffer>(desc);
 
     desc.colors = { {ColorFormat::RGBA16F} };
-    // Preserve the depth texture allocated by the old useDepth=false path.
-    desc.depth = { DepthStorage::Texture2D, DepthFormat::Depth24 };
     for (std::size_t i = 0; i < replacement.bloomPingPong.size(); ++i)
     {
         desc.debugName = "Bloom Ping-Pong " + std::to_string(i);

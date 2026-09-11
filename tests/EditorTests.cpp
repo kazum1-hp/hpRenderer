@@ -49,6 +49,18 @@ namespace
                 ImGui::End();
             }
             editor.draw(scene, settings, output, input, [] {});
+            Rendering::RendererStatistics statistics;
+            statistics.gpuSupported = frame > 0;
+            statistics.gpuValid = frame > 1;
+            statistics.frameNumber = 3;
+            statistics.gpuFrameNumber = 2;
+            if (statistics.gpuValid)
+            {
+                Rendering::GPUQueryResult query;
+                query.name = "Frame";
+                statistics.gpuQueries.push_back(query);
+            }
+            editor.drawStatistics(statistics, frame ? 16.0 : -1.0, frame ? 4.0 : -1.0);
             if (gpu) editor.endFrame(); else ImGui::Render();
             require(ImGui::GetDrawData() != nullptr, "missing editor draw data");
             if (frame == 2)
@@ -58,7 +70,7 @@ namespace
         }
         require(editor.requestedExtent().isValid(), "viewport did not request a valid extent");
         for (const char* title : {"Light Control", "Renderer Settings", "Post Processing",
-            "Scene", "Reload Shaders", "Reload Assets", "Console"})
+            "Scene", "Reload Shaders", "Reload Assets", "Console", "Renderer Statistics"})
             require(ImGui::FindWindowByName(title) != nullptr, "missing preserved editor window");
     }
 

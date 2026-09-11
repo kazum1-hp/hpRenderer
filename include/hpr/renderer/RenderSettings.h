@@ -10,6 +10,7 @@ struct GroundPlaneSettings
 
 struct PostProcessSettings
 {
+    // Disabled: default Reinhard + gamma output, without optional effects.
     bool enabled = false;
     bool hdr = true;
     bool bloom = false;

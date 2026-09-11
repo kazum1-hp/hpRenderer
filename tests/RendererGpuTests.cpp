@@ -158,8 +158,21 @@ namespace
         settings.drawLights = true;
         settings.postProcess.enabled = true;
         for (bool deferred : {false, true})
+        for (bool post : {false, true})
         {
             settings.deferred = deferred;
+            settings.postProcess = {};
+            settings.postProcess.enabled = post;
+            if (!post)
+            {
+                // Hidden editor values must not affect the default display conversion.
+                settings.postProcess.bloom = true;
+                settings.postProcess.hdr = false;
+                settings.postProcess.exposure = 8.0f;
+                settings.postProcess.effectMode = 1;
+                settings.postProcess.toneMappingMode = 2;
+                settings.postProcess.scanPosition = 64;
+            }
             const auto output = renderer.render(scene, camera, settings, {0, false, true});
             const auto pixel = readPixel(output.colorTexture, output.extent);
             require(std::fabs(pixel[0] - std::pow(0.5f, 1.0f / 2.2f)) < 0.012f &&
@@ -188,10 +201,73 @@ namespace
         }
     };
 
+    PFNGLCREATESHADERPROC originalCreateShader;
+    PFNGLCREATEPROGRAMPROC originalCreateProgram;
+    std::vector<GLuint> createdShaders, createdPrograms;
+    GLuint APIENTRY trackShader(GLenum type)
+    {
+        const auto id = originalCreateShader(type);
+        createdShaders.push_back(id);
+        return id;
+    }
+    GLuint APIENTRY trackProgram()
+    {
+        const auto id = originalCreateProgram();
+        createdPrograms.push_back(id);
+        return id;
+    }
+
+    void shaderFailureTests(const std::filesystem::path& directory)
+    {
+        const auto vs = directory / "failure.vs", fs = directory / "failure.fs", gs = directory / "failure.gs";
+        const std::string vertex = "#version 330 core\nvoid main(){gl_Position=vec4(0,0,0,1);}";
+        const std::string fragment = "#version 330 core\nout vec4 color; void main(){color=vec4(1);}";
+        const std::string geometry = "#version 330 core\nlayout(points) in; layout(points,max_vertices=1) out;"
+            "void main(){gl_Position=gl_in[0].gl_Position; EmitVertex(); EndPrimitive();}";
+        auto timestamp = std::filesystem::file_time_type::clock::now();
+        const auto write = [&](const auto& path, const std::string& code) {
+            { std::ofstream file(path); file << code; require(file.good(), "write shader fixture"); }
+            timestamp += std::chrono::seconds(2);
+            std::filesystem::last_write_time(path, timestamp);
+        };
+        write(vs, vertex); write(fs, fragment); write(gs, geometry);
+        Shader shader(vs.generic_string(), fs.generic_string(), gs.generic_string());
+        const auto old = shader.ID;
+        // Repeat every failure, observing actual GL allocations rather than assuming IDs are consecutive.
+        for (int iteration = 0; iteration < 2; ++iteration)
+            for (int stage = 0; stage < 4; ++stage)
+            {
+                write(vs, stage == 0 ? "invalid vertex" : vertex);
+                write(fs, stage == 1 ? "invalid fragment" : stage == 3
+                    ? "#version 330 core\nin vec3 missing; out vec4 color; void main(){color=vec4(missing,1);}"
+                    : fragment);
+                write(gs, stage == 2 ? "invalid geometry" : geometry);
+                createdShaders.clear(); createdPrograms.clear();
+                originalCreateShader = glad_glCreateShader;
+                originalCreateProgram = glad_glCreateProgram;
+                glad_glCreateShader = trackShader;
+                glad_glCreateProgram = trackProgram;
+                const bool reloaded = shader.reload();
+                glad_glCreateShader = originalCreateShader;
+                glad_glCreateProgram = originalCreateProgram;
+                require(!reloaded && shader.ID == old, "failed reload replaced the working program");
+                for (auto id : createdShaders) require(!glIsShader(id), "failed reload leaked a shader object");
+                for (auto id : createdPrograms) require(!glIsProgram(id), "failed reload leaked a program");
+                shader.use();
+                require(glGetError() == GL_NO_ERROR, "old shader unusable after reload failure");
+            }
+        write(vs, vertex); write(fs, fragment); write(gs, geometry);
+        require(shader.reload() && shader.ID != old, "shader did not recover after compile/link failures");
+        shader.use();
+        require(!glIsProgram(old), "successful reload retained the old program");
+        glUseProgram(0);
+    }
+
     void gpuTests()
     {
         AssetManager resources;
         ModelFixture fixture;
+        shaderFailureTests(fixture.directory);
         const auto shaderDirectory = fixture.directory / "shaders";
         std::filesystem::copy(std::filesystem::path(HPRENDERER_SOURCE_DIR) / "shaders",
             shaderDirectory, std::filesystem::copy_options::recursive);
@@ -342,6 +418,36 @@ namespace
         const auto second = BuildRenderScene(secondSource);
         Camera camera;
         const auto firstCamera = BuildCameraData(camera, {64, 48});
+        {
+            auto statisticsScene = first;
+            statisticsScene.environmentMode = EnvironmentMode::Disabled;
+            RenderSettings measured;
+            verifyOutput(renderer.render(statisticsScene, firstCamera, measured, {}), {64, 48});
+            require(renderer.statistics().drawCalls == 2 && renderer.statistics().triangles == 3 &&
+                    renderer.statistics().renderedObjects == 1, "forward submission statistics incorrect");
+            measured.postProcess.enabled = measured.postProcess.bloom = true;
+            verifyOutput(renderer.render(statisticsScene, firstCamera, measured, {}), {64, 48});
+            require(renderer.statistics().drawCalls == 7 && renderer.statistics().triangles == 13 &&
+                    renderer.statistics().renderedObjects == 1, "bloom cost not reflected in statistics");
+            measured.postProcess.bloom = false;
+            measured.deferred = measured.drawGBufferDebug = true;
+            verifyOutput(renderer.render(statisticsScene, firstCamera, measured, {}), {64, 48});
+            require(renderer.statistics().drawCalls == 7 && renderer.statistics().triangles == 13,
+                    "deferred/debug submissions missing from statistics");
+            const auto sampledFrame = renderer.statistics().frameNumber;
+            glFinish(); // Test-only synchronization: production profiler must never do this.
+            verifyOutput(renderer.render(statisticsScene, firstCamera, measured, {}), {64, 48});
+            const auto& stats = renderer.statistics();
+            require(stats.gpuValid && stats.gpuFrameNumber == sampledFrame, "real GPU query did not resolve");
+            require(stats.gpuQueries.front().drawCalls == 7 && stats.gpuQueries.front().triangles == 13 &&
+                    std::isfinite(stats.gpuQueries.front().milliseconds), "GPU sample counters/timing incorrect");
+            measured.groundPlane.visible = true;
+            verifyOutput(renderer.render(statisticsScene, firstCamera, measured, {}), {64, 48});
+            require(renderer.statistics().renderedObjects == 2, "ground plane not counted");
+            statisticsScene.objects[0].transform = glm::mat4(0);
+            verifyOutput(renderer.render(statisticsScene, firstCamera, measured, {}), {64, 48});
+            require(renderer.statistics().renderedObjects == 1, "skipped singular object counted as rendered");
+        }
         deferredDepthTests(resources, first, firstCamera);
         camera.MoveRight(2.0f);
         const auto secondCamera = BuildCameraData(camera, {64, 48});
@@ -364,7 +470,11 @@ namespace
         output = renderer.render(second, secondCamera, defaults, {17.0f, false, false});
         verifyOutput(output, {64, 48});
         verifyCamera(*modelShader, secondCamera);
-        require(output.colorTexture != postOutput && uniformInt(*modelShader, "pointLightCount") == 0 &&
+        require(output.colorTexture == postOutput, "all modes must return the final display target");
+        require(uniformInt(*resources.GetShader(ShaderId::ToneMapping), "useBloom") == 0 &&
+            uniformInt(*resources.GetShader(ShaderId::ToneMapping), "effectMode") == 0,
+            "disabled post-processing retained optional effects");
+        require(uniformInt(*modelShader, "pointLightCount") == 0 &&
             uniformInt(*modelShader, "parallelLight.enabled") == 0, "scene/settings/light state leaked across submissions");
         require(first.objects.size() == 1 && first.pointLights.size() == 1 && second.objects.empty(),
             "render mutated scene snapshots");

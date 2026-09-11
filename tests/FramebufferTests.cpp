@@ -96,8 +96,22 @@ namespace
         for (const auto& target : targets.bloomPingPong)
         {
             checkTexture(target->getColor(), GL_RGBA16F, GL_LINEAR, 64);
-            checkTexture(target->getDepth2D(), GL_DEPTH_COMPONENT24, GL_NEAREST, 64);
         }
+        const auto checkColorOnly = [&] {
+            for (const auto* target : {targets.finalOutput.get(), targets.bloomPingPong[0].get(),
+                                      targets.bloomPingPong[1].get()})
+            {
+                checkComplete(*target);
+                for (GLenum attachment : {GL_DEPTH_ATTACHMENT, GL_STENCIL_ATTACHMENT})
+                {
+                    GLint type = -1;
+                    glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, attachment,
+                        GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &type);
+                    require(type == GL_NONE, "fullscreen target allocated depth/stencil");
+                }
+            }
+        };
+        checkColorOnly();
         glBindTexture(GL_TEXTURE_2D, targets.directionalShadow->getDepth2D());
         GLint wrap = 0;
         glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, &wrap);
@@ -123,6 +137,7 @@ namespace
         const GLuint shadow = targets.directionalShadow->getFBO();
         const GLuint point = targets.pointShadows[0]->getFBO();
         targets.resizeViewport({80, 60});
+        checkColorOnly();
         require(!glIsTexture(oldOutput), "old output leaked after resize");
         require(targets.directionalShadow->getFBO() == shadow && targets.pointShadows[0]->getFBO() == point,
             "viewport resize changed shadow allocations");

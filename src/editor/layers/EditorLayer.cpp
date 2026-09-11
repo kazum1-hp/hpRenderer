@@ -192,6 +192,7 @@ void EditorLayer::drawDockSpace()
             ImGui::DockBuilderDockWindow("Light Control", left_top_id);
             ImGui::DockBuilderDockWindow("Renderer Settings", left_bottom_id);
             ImGui::DockBuilderDockWindow("Post Processing", left_bottom_id);
+            ImGui::DockBuilderDockWindow("Renderer Statistics", left_top_id);
             ImGui::DockBuilderDockWindow("Scene", dock_main_id);
             ImGui::DockBuilderDockWindow("Reload Shaders", bottom_left_id);
             ImGui::DockBuilderDockWindow("Reload Assets", bottom_left_id);

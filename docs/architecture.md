@@ -57,18 +57,35 @@ flowchart TD
     Markers --> Sky[IBL skybox / six-face background / none]
     Sky --> Alpha[Sorted forward transparency]
     Alpha --> Debug[Optional deferred G-buffer overlay]
-    Debug --> Post{Deferred or post-processing enabled?}
-    Post -->|Yes| Bloom[Optional bloom blur]
-    Bloom --> Tone[Tone mapping / post effects]
+    Debug --> Bloom[Optional bloom blur when post enabled]
+    Bloom --> Tone[Display output: tone mapping / gamma + optional effects]
     Tone --> View[Editor Scene viewport]
-    Post -->|No| View
 ```
 
 The order follows `RenderPipeline::render`. Transparent materials are composited
 after the skybox in **both** paths, using opaque depth and no transparent depth
-writes. The deferred branch forces post-processing in Application. With post
-disabled, the forward path returns its scene target directly. The returned
+writes. Scene shading, skyboxes, light markers and transparent blending all remain
+in linear HDR. Both paths always finish with display conversion. With post disabled,
+the output uses Reinhard tone mapping and gamma 2.2 at exposure 1; bloom, image
+effects and saved custom settings are ignored. With post enabled, the configured
+tone mapper, exposure, bloom and effects apply (`useHdr=false` skips tone mapping,
+but still applies gamma). Deferred rendering does not force the post switch on.
+G-buffer diagnostic overlays retain their position before display conversion;
+their displayed values are therefore affected by that conversion and enabled effects.
+Final output and bloom targets have no depth/stencil attachments; scene targets
+retain depth for geometry, skyboxes and transparency. The returned
 `RenderOutput` is a non-owning view, not a transferable texture allocation.
+
+### Transparency limitations
+
+Blended draws are stably sorted back-to-front by their transformed mesh center in
+camera space, across objects and node instances. They depth-test against opaque
+geometry but do not write depth. This is an approximation: intersecting meshes,
+intersecting triangles within one mesh, cyclic overlap and large meshes whose
+centers do not represent their visible surfaces can blend incorrectly. There is
+no per-triangle sorting or order-independent transparency (OIT). Masked materials
+use alpha cutoff and participate in opaque depth/shadow rendering instead.
+Consider mesh splitting or OIT only when a scene requires better transparency.
 
 IBL precompute runs on demand, not as an unconditional per-frame pass. It generates
 the environment cubemap, irradiance map, prefiltered map and BRDF LUT. Selecting
@@ -97,6 +114,29 @@ preserves the old valid extent. Do not retain `RenderOutput` across resize/shutd
 Imported PBR factors/textures remain the default material. Per-object controls are
 AO, roughness and metallic **bias**, plus normal-map enable/disable; there is no
 Phong material system or editable material-slot override layer.
+
+### Asset cache policy
+
+The current demo retains successfully loaded models, textures and shaders through
+strong references in `AssetManager` until explicit `Clear()` (normally shutdown),
+or replacement of a cache entry during reload. Removing a Scene object only drops
+that object's reference: it does **not** promise CPU memory or GPU memory reclamation.
+`ModelGpuCache` removes entries whose CPU model identity has expired during its
+next `prepare()`; AssetManager-owned models normally cannot expire while cached.
+Loading many distinct large assets can therefore accumulate memory. Environment
+asset identities use weak references, but cached HDR textures still follow the
+texture retention policy.
+
+This is intentional for the small demo: repeated imports reuse resources. There
+is currently no automatic eviction, memory budget or unload-on-object-delete.
+`Clear()` drops cache references, not references held by other consumers, and is
+not a scene-unload protocol. Release GPU owners only with the GL context current.
+
+When scene switching or repeated large-model browsing requires reclamation, add
+an explicit unused-resource sweep: drop unused CPU model cache entries, prune
+expired GPU models, then remove unused cached textures after GPU material holders
+release them. Render snapshots and other borrowers must be accounted for. Add
+capacity budgets/LRU only when measured asset workloads justify them.
 
 ## Remaining boundaries worth improving
 

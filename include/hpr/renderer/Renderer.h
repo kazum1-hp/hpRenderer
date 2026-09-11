@@ -4,6 +4,7 @@
 #include "hpr/renderer/RenderTypes.h"
 #include "hpr/renderer/RenderScene.h"
 #include "hpr/renderer/RenderFrameData.h"
+#include "hpr/renderer/opengl/RenderProfiler.h"
 #include <memory>
 
 class AssetManager;
@@ -26,8 +27,10 @@ public:
     // Returns the actual extent, including when a resize fails and retains old targets.
     RenderExtent resize(RenderExtent extent);
     void restoreShaderBindings();
+    const Rendering::RendererStatistics& statistics() const { return profiler.statistics(); }
 
 private:
+    Rendering::RenderProfiler profiler;
     std::unique_ptr<Rendering::RenderPipeline> pipeline;
     IBLCache iblCache;
     std::unique_ptr<Skybox> sixFaceSkybox;

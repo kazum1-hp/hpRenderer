@@ -1,6 +1,7 @@
 #include "hpr/renderer/passes/RenderPasses.h"
 #include "hpr/renderer/passes/DrawHelpers.h"
 #include "hpr/renderer/opengl/Mesh.h"
+#include "hpr/renderer/opengl/RenderProfiler.h"
 
 namespace Rendering
 {
@@ -45,6 +46,7 @@ void GBufferDebugPass::execute(const RenderPassContext &context, const FrameBuff
             gbufferDebugShader->setUniform("nearPlane", camera.nearPlane);
             gbufferDebugShader->setUniform("farPlane", camera.farPlane);
             glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+            RecordDraw(2);
         };
 
         drawDebug(gNormal, 0);

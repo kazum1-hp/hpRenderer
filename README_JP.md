@@ -88,14 +88,16 @@ flowchart TD
     Markers --> Sky[IBL skybox / six-image background / none]
     Sky --> Transparent[Sorted forward transparency]
     Transparent --> Debug[Optional deferred G-buffer overlay]
-    Debug --> Post{Deferred or post-processing enabled?}
-    Post -->|Yes| Bloom[Optional bloom]
-    Bloom --> Tone[Tone mapping / post effects]
+    Debug --> Bloom[Optional bloom when post enabled]
+    Bloom --> Tone[Display output: tone mapping / gamma + optional effects]
     Tone --> View[Editor Scene viewport]
-    Post -->|No| View
 ```
 
 透明物体は両経路ともスカイボックスの後にフォワード描画します。
+合成は線形 HDR 空間で行い、表示変換は常に最後に実行します。後処理を無効にすると、
+標準の Reinhard とガンマ変換を使用し、追加エフェクトは適用しません。
+メッシュ中心による透明描画のソートは交差を正しく扱えません。
+アセットは終了までキャッシュされ、オブジェクトを削除しても自動解放されません。
 6 枚画像のスカイボックスは**背景のみ**で、選択すると IBL ライティングを無効化します。
 パス順序・所有権・依存方向の詳細は [architecture.md](docs/architecture.md) にまとめています。
 

@@ -1,6 +1,7 @@
 #include "hpr/renderer/passes/RenderPasses.h"
 #include "hpr/renderer/passes/DrawHelpers.h"
 #include "hpr/renderer/opengl/Mesh.h"
+#include "hpr/renderer/opengl/RenderProfiler.h"
 #include "hpr/renderer/opengl/GpuModel.h"
 #include "hpr/renderer/RenderLimits.h"
 #include <string>
@@ -64,7 +65,6 @@ void ForwardPass::execute(const GpuRenderScene &scene, const RenderPassContext &
 
     modelShader->setUniform("time", frame.timeSeconds);
     modelShader->setUniform("useIBL", context.environment.irradianceMap != 0);
-    modelShader->setUniform("usePost", settings.deferred || settings.postProcess.enabled);
 
     // transform matrix
     modelShader->setUniform("view", camera.view);
@@ -123,6 +123,7 @@ void ForwardPass::execute(const GpuRenderScene &scene, const RenderPassContext &
 
     if (!transparentOnly && settings.groundPlane.visible)
     {
+        ScopedRenderedObject renderedObject(&plane);
         modelShader->setUniform("aoBias", 0.0f);
         modelShader->setUniform("roughnessBias", 0.0f);
         modelShader->setUniform("metallicBias", 0.0f);
@@ -138,6 +139,7 @@ void ForwardPass::execute(const GpuRenderScene &scene, const RenderPassContext &
     std::vector<TransparentDraw> transparent;
     for (const auto &obj : scene.objects)
     {
+        ScopedRenderedObject renderedObject(&obj);
         if (!obj.model)
             continue;
         if (transparentOnly)
@@ -178,6 +180,7 @@ void ForwardPass::execute(const GpuRenderScene &scene, const RenderPassContext &
         glDepthMask(GL_FALSE);
         for (const auto& entry : transparent)
         {
+            ScopedRenderedObject renderedObject(entry.object);
             const auto& obj = *entry.object;
             modelShader->setUniform("aoBias", obj.material.aoBias);
             modelShader->setUniform("roughnessBias", obj.material.roughnessBias);

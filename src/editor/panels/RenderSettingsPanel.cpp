@@ -43,6 +43,8 @@ void RenderSettingsPanel::drawPostProcessing(RenderSettings& settings, RenderExt
     // --------------------- Post Processing --------------------------
     ImGui::Begin("Post Processing");
     ImGui::Checkbox("usePost", &settings.postProcess.enabled);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Enable custom tone mapping, exposure and effects.\nWhen off: default Reinhard + gamma output remains active.");
 
     if (settings.postProcess.enabled)
     {

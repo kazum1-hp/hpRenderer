@@ -84,7 +84,6 @@ uniform bool hasARMMap;
 
 uniform vec3 viewPos;
 uniform bool useQuadratic;
-uniform bool usePost;
 uniform float time;
 
 uniform bool parallelShadows;
@@ -219,12 +218,7 @@ void main()
 
 	vec3 textureColor = pointColor + parallelColor + ambient;
 
-    if (!usePost)
-    {
-        textureColor = textureColor / (textureColor + vec3(1.0));
-
-        textureColor = vec3(pow(textureColor, vec3(1.0 / 2.2)));
-    }
+    // Keep scene radiance linear until all transparent draws are composited.
 
     BrightColor = vec4(0.0, 0.0, 0.0, texColor.a);
 

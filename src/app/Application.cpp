@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <stdexcept>
+#include <chrono>
 
 Application::Application(const char* title)
 	: camera(),
@@ -85,14 +86,21 @@ void Application::run()
 	// The editor owns its UI context and backends.
 	editor.initialize(window.getWindow());
 
-	float lastFrame = 0.0f;
+    using FrameClock = std::chrono::steady_clock;
+    auto previousStart = FrameClock::now();
+    bool hasPreviousFrame = false;
+    double previousCpuMs = -1.0;
 
 	while (!glfwWindowShouldClose(window.getWindow())) {
 		
 		
-		float currentFrame = static_cast<float>(glfwGetTime());
-		float deltaTime = currentFrame - lastFrame;
-		lastFrame = currentFrame;
+        const auto frameStart = FrameClock::now();
+        const double frameMs = hasPreviousFrame
+            ? std::chrono::duration<double, std::milli>(frameStart - previousStart).count() : -1.0;
+        previousStart = frameStart;
+        hasPreviousFrame = true;
+        const float currentFrame = static_cast<float>(glfwGetTime());
+        const float deltaTime = frameMs >= 0 ? static_cast<float>(frameMs / 1000.0) : 0.0f;
 		update(deltaTime);
 
 		// Clear screen
@@ -100,16 +108,16 @@ void Application::run()
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		const auto extent = renderer.resize(editor.requestedExtent());
-		// Preserve the editor's sticky post-process toggle without mutating settings inside Renderer.
-		if (renderSettings.deferred) renderSettings.postProcess.enabled = true;
 		const RenderFrameData frame{currentFrame, input.isParallelLightOn(), input.isPointLightOn()};
 		const auto output = renderer.render(BuildRenderScene(mainScene),
 			BuildCameraData(camera, extent), renderSettings, frame);
 		editor.beginFrame();
 		editor.draw(mainScene, renderSettings, output, input,
 			[this] { renderer.restoreShaderBindings(); });
+        editor.drawStatistics(renderer.statistics(), frameMs, previousCpuMs);
 		input.setCaptureState(editor.captureState());
 		editor.endFrame();
+        previousCpuMs = std::chrono::duration<double, std::milli>(FrameClock::now() - frameStart).count();
 
 		// Swap buffers and poll IO events
 		glfwSwapBuffers(window.getWindow());

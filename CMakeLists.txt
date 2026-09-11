@@ -87,6 +87,7 @@ target_link_libraries(hpRenderer_import PUBLIC assimp)
 
 # Concrete OpenGL resources; intentionally not a cross-API RHI.
 add_library(hpRenderer_opengl STATIC
+    src/renderer/opengl/RenderProfiler.cpp
     src/renderer/opengl/FrameBuffer.cpp
     src/renderer/opengl/GpuModel.cpp
     src/renderer/opengl/Mesh.cpp
@@ -126,6 +127,7 @@ add_library(hpRenderer_core STATIC
 target_link_libraries(hpRenderer_core PUBLIC hpRenderer_opengl glfw)
 
 add_library(hpRenderer_editor STATIC
+    src/editor/panels/RendererStatisticsPanel.cpp
     src/editor/layers/EditorLayer.cpp
     src/editor/console/ConsoleCapture.cpp
     src/editor/panels/AssetPanel.cpp
@@ -157,6 +159,9 @@ include(cmake/RuntimeBundle.cmake)
 # These tests deliberately avoid creating an OpenGL context. They protect the
 # scene-level behavior that the renderer refactor will move between modules.
 if(BUILD_TESTING)
+    add_executable(hpRenderer_profiler_tests tests/RenderProfilerTests.cpp)
+    target_link_libraries(hpRenderer_profiler_tests PRIVATE hpRenderer_opengl)
+    add_test(NAME render_profiler COMMAND hpRenderer_profiler_tests)
     add_executable(hpRenderer_startup_asset_tests tests/StartupAssetTests.cpp src/core/RuntimePaths.cpp)
     target_link_libraries(hpRenderer_startup_asset_tests PRIVATE hpRenderer_import)
     add_test(NAME startup_assets COMMAND hpRenderer_startup_asset_tests "${PROJECT_BINARY_DIR}/assets")

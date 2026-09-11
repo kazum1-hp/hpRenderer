@@ -15,7 +15,7 @@ void SkyboxPass::restoreShaderBindings()
     backgroundShader->setUniform("environmentMap", 0);
 }
 
-void SkyboxPass::execute(const RenderPassContext &context, const FrameBuffer &output, const Mesh &cube, bool usePost)
+void SkyboxPass::execute(const RenderPassContext &context, const FrameBuffer &output, const Mesh &cube)
 {
     if (!context.environment.envCubemap) return;
     glBindFramebuffer(GL_FRAMEBUFFER, output.getFBO());
@@ -29,7 +29,6 @@ void SkyboxPass::execute(const RenderPassContext &context, const FrameBuffer &ou
     backgroundShader->use();
     backgroundShader->setUniform("view", camera.view);
     backgroundShader->setUniform("projection", camera.projection);
-    backgroundShader->setUniform("usePost", usePost);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, env.envCubemap);
     cube.draw();

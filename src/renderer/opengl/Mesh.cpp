@@ -1,4 +1,5 @@
 #include "hpr/renderer/opengl/Mesh.h"
+#include "hpr/renderer/opengl/RenderProfiler.h"
 #include <iostream>
 #include <utility>
 #include <stdexcept>
@@ -70,6 +71,7 @@ void Mesh::draw() const
 {
 	glBindVertexArray(VAO);
 	glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+    Rendering::RecordDraw(static_cast<std::uint64_t>(indexCount) / 3);
 	glBindVertexArray(0);
 }
 
@@ -77,6 +79,7 @@ void Mesh::drawInstanced(int instanceCount) const
 {
 	glBindVertexArray(VAO);
 	glDrawElementsInstanced(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0, instanceCount);
+    Rendering::RecordDraw(instanceCount > 0 ? static_cast<std::uint64_t>(indexCount) / 3 * instanceCount : 0);
 	glBindVertexArray(0);
 }
 

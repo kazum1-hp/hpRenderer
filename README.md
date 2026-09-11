@@ -87,15 +87,17 @@ flowchart TD
     Markers --> Sky[IBL skybox / six-image background / none]
     Sky --> Transparent[Sorted forward transparency]
     Transparent --> Debug[Optional deferred G-buffer overlay]
-    Debug --> Post{Deferred or post-processing enabled?}
-    Post -->|Yes| Bloom[Optional bloom]
-    Bloom --> Tone[Tone mapping / post effects]
+    Debug --> Bloom[Optional bloom when post enabled]
+    Bloom --> Tone[Display output: tone mapping / gamma + optional effects]
     Tone --> View[Editor Scene viewport]
-    Post -->|No| View
 ```
 
 Six-image skyboxes are **background-only**; selecting them disables IBL lighting.
-Transparent materials use forward compositing in both render paths. The
+Transparent materials use linear HDR forward compositing in both render paths.
+Display conversion always runs; disabling post uses default Reinhard + gamma and
+disables optional effects. Mesh-center transparency sorting cannot resolve
+intersections. Assets are cached until shutdown; deleting an object does not unload
+its cached resources. The
 [architecture document](docs/architecture.md) explains pass responsibilities,
 resource lifetimes, cache invalidation, and dependency direction.
 

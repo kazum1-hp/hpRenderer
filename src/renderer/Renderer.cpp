@@ -22,6 +22,7 @@ void Renderer::init(AssetManager& resources, RenderExtent extent)
 
 void Renderer::shutdown()
 {
+    profiler.shutdown();
     iblCache.clear();
     sixFaceSkybox.reset();
     skyboxSource.reset();
@@ -32,20 +33,24 @@ RenderOutput Renderer::render(const RenderScene& scene, const CameraData& camera
     const RenderSettings& settings, const RenderFrameData& frame)
 {
     if (!pipeline) throw std::logic_error("Renderer::render called before initialization");
+    Rendering::ScopedRenderFrame profilingFrame(profiler);
     EnvironmentGpuView environment;
-    if (scene.environmentMode == EnvironmentMode::IBL) environment = iblCache.prepare(scene.environment);
-    else if (scene.environmentMode == EnvironmentMode::SixFaces && scene.skybox)
     {
-        if (skyboxSource.lock() != scene.skybox)
+        Rendering::ScopedGPUQuery query("Environment Prepare");
+        if (scene.environmentMode == EnvironmentMode::IBL) environment = iblCache.prepare(scene.environment);
+        else if (scene.environmentMode == EnvironmentMode::SixFaces && scene.skybox)
         {
-            auto replacement = std::make_unique<Skybox>();
-            if (replacement->load(*scene.skybox))
+            if (skyboxSource.lock() != scene.skybox)
             {
-                sixFaceSkybox = std::move(replacement);
-                skyboxSource = scene.skybox;
+                auto replacement = std::make_unique<Skybox>();
+                if (replacement->load(*scene.skybox))
+                {
+                    sixFaceSkybox = std::move(replacement);
+                    skyboxSource = scene.skybox;
+                }
             }
+            if (sixFaceSkybox) environment.envCubemap = sixFaceSkybox->getID();
         }
-        if (sixFaceSkybox) environment.envCubemap = sixFaceSkybox->getID();
     }
     return pipeline->render(scene, camera, settings, frame, environment);
 }

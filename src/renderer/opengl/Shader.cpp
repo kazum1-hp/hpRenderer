@@ -221,7 +221,6 @@ bool Shader::reload()
 
 	// Creating & compiling a new shader
 	GLuint vertex = glCreateShader(GL_VERTEX_SHADER);
-	GLuint fragment = glCreateShader(GL_FRAGMENT_SHADER);
 	GLuint geometry = 0;
 
 	glShaderSource(vertex, 1, &vShaderCode, nullptr);
@@ -236,6 +235,8 @@ bool Shader::reload()
 		return false;
 	}
 
+	// Allocate the next stage only after vertex compilation succeeds.
+	GLuint fragment = glCreateShader(GL_FRAGMENT_SHADER);
 	glShaderSource(fragment, 1, &fShaderCode, nullptr);
 	glCompileShader(fragment);
 	glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);

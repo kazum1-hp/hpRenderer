@@ -12,7 +12,8 @@ ToneMappingPass::ToneMappingPass(AssetManager &resources)
 void ToneMappingPass::execute(const RenderPassContext &context, GLuint sceneTexture, GLuint bloomTexture,
                               const FrameBuffer &output, const Mesh &screenQuad)
 {
-    const auto &settings = context.settings;
+    const PostProcessSettings defaults;
+    const auto &post = context.settings.postProcess.enabled ? context.settings.postProcess : defaults;
     const auto &frame = context.frame;
     glDisable(GL_DEPTH_TEST);
 
@@ -21,22 +22,22 @@ void ToneMappingPass::execute(const RenderPassContext &context, GLuint sceneText
 
     sceneFramebufferShader->use();
 
-    sceneFramebufferShader->setUniform("effectMode", settings.postProcess.effectMode);
-    sceneFramebufferShader->setUniform("toneMappingMode", settings.postProcess.toneMappingMode);
-    sceneFramebufferShader->setUniform("offset", settings.postProcess.kernelOffset);
+    sceneFramebufferShader->setUniform("effectMode", post.effectMode);
+    sceneFramebufferShader->setUniform("toneMappingMode", post.toneMappingMode);
+    sceneFramebufferShader->setUniform("offset", post.kernelOffset);
     sceneFramebufferShader->setUniform("screenTexture", 0);
     sceneFramebufferShader->setUniform("blur", 1);
-    sceneFramebufferShader->setUniform("scanPos", settings.postProcess.scanPosition);
-    sceneFramebufferShader->setUniform("useHdr", settings.postProcess.hdr);
-    sceneFramebufferShader->setUniform("useBloom", settings.postProcess.bloom);
-    sceneFramebufferShader->setUniform("exposure", settings.postProcess.exposure);
+    sceneFramebufferShader->setUniform("scanPos", post.scanPosition);
+    sceneFramebufferShader->setUniform("useHdr", post.hdr);
+    sceneFramebufferShader->setUniform("useBloom", post.bloom);
+    sceneFramebufferShader->setUniform("exposure", post.exposure);
     sceneFramebufferShader->setUniform("time", frame.timeSeconds);
     sceneFramebufferShader->setUniform("viewportWidth", static_cast<float>(context.extent.width));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sceneTexture);
 
-    if (settings.postProcess.bloom)
+    if (post.bloom)
     {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, bloomTexture);

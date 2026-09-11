@@ -1,6 +1,7 @@
 #include "hpr/renderer/passes/RenderPasses.h"
 #include "hpr/renderer/passes/DrawHelpers.h"
 #include "hpr/renderer/opengl/Mesh.h"
+#include "hpr/renderer/opengl/RenderProfiler.h"
 
 namespace Rendering
 {
@@ -33,6 +34,7 @@ void GBufferPass::execute(const GpuRenderScene &scene, const RenderPassContext &
 
     if (settings.groundPlane.visible)
     {
+        ScopedRenderedObject renderedObject(&plane);
         gBufferShader->setUniform("aoBias", 0.0f);
         gBufferShader->setUniform("roughnessBias", 0.0f);
         gBufferShader->setUniform("metallicBias", 0.0f);
@@ -45,6 +47,7 @@ void GBufferPass::execute(const GpuRenderScene &scene, const RenderPassContext &
 
     for (const auto &obj : scene.objects)
     {
+        ScopedRenderedObject renderedObject(&obj);
         if (!obj.model)
             continue;
         gBufferShader->setUniform("aoBias", obj.material.aoBias);

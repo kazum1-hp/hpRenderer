@@ -2,6 +2,7 @@
 #include "hpr/renderer/passes/DrawHelpers.h"
 #include "hpr/assets/AssetManager.h"
 #include "hpr/renderer/opengl/PrimitiveMeshes.h"
+#include "hpr/renderer/opengl/RenderProfiler.h"
 #include <iostream>
 
 namespace Rendering
@@ -25,42 +26,68 @@ RenderPipeline::RenderPipeline(AssetManager &resources, RenderExtent extent)
 RenderOutput RenderPipeline::render(const RenderScene &source, const CameraData &camera, const RenderSettings &settings,
                                     const RenderFrameData &frame, EnvironmentGpuView environment)
 {
-    const auto scene = models.prepare(source);
+    GpuRenderScene scene;
+    {
+        ScopedGPUQuery query("Scene Prepare");
+        scene = models.prepare(source);
+        targets.syncPointShadows(PointLightCount(scene), ShadowSize);
+    }
     const RenderPassContext context{camera,      settings, frame, environment, scene.directionalLight.lightSpaceMatrix,
                                     renderExtent};
-    targets.syncPointShadows(PointLightCount(scene), ShadowSize);
     const ShadowMapView shadows{*targets.directionalShadow, targets.pointShadows};
 
     if (settings.shadows)
+    {
+        ScopedGPUQuery query("Shadow Pass");
         shadow.execute(scene, context, shadows, *plane);
+    }
 
     const FrameBuffer &sceneTarget = settings.deferred ? *targets.deferredLighting : *targets.hdr;
     if (settings.deferred)
     {
-        gbuffer.execute(scene, context, *targets.gbuffer, *plane);
+        {
+            ScopedGPUQuery query("Geometry Pass");
+            gbuffer.execute(scene, context, *targets.gbuffer, *plane);
+        }
+        ScopedGPUQuery query("Lighting Pass");
         lighting.execute(scene, context, shadows, *targets.gbuffer, sceneTarget, *screenQuad);
     }
     else
     {
+        ScopedGPUQuery query("Forward Pass");
         forward.execute(scene, context, shadows, sceneTarget, *plane);
     }
 
     if (settings.drawLights)
+    {
+        ScopedGPUQuery query("Light Markers");
         markers.execute(scene, context, sceneTarget, *cube);
-    const bool usePost = settings.deferred || settings.postProcess.enabled;
-    skybox.execute(context, sceneTarget, *cube, usePost);
+    }
+    {
+        ScopedGPUQuery query("Skybox");
+        skybox.execute(context, sceneTarget, *cube);
+    }
     // Both paths composite blended materials forward, after opaque depth and the skybox.
-    forward.execute(scene, context, shadows, sceneTarget, *plane, ForwardPhase::Transparent);
+    {
+        ScopedGPUQuery query("Transparent Pass");
+        forward.execute(scene, context, shadows, sceneTarget, *plane, ForwardPhase::Transparent);
+    }
     if (settings.deferred && settings.drawGBufferDebug)
+    {
+        ScopedGPUQuery query("GBuffer Debug");
         debug.execute(context, *targets.gbuffer, sceneTarget, *screenQuad);
-
-    if (!usePost)
-        return {sceneTarget.getColor(), renderExtent};
+    }
 
     GLuint bloomTexture = 0;
-    if (settings.postProcess.bloom)
+    if (settings.postProcess.enabled && settings.postProcess.bloom)
+    {
+        ScopedGPUQuery query("Bloom");
         bloomTexture = bloom.execute(context, sceneTarget.getColor(1), targets.bloomPingPong, *screenQuad);
-    toneMapping.execute(context, sceneTarget.getColor(), bloomTexture, *targets.finalOutput, *screenQuad);
+    }
+    {
+        ScopedGPUQuery query("Tone Mapping");
+        toneMapping.execute(context, sceneTarget.getColor(), bloomTexture, *targets.finalOutput, *screenQuad);
+    }
     return {targets.finalOutput->getColor(), renderExtent};
 }
 
