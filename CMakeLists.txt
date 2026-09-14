@@ -125,6 +125,9 @@ add_library(hpRenderer_core STATIC
     src/renderer/passes/ToneMappingPass.cpp
 )
 target_link_libraries(hpRenderer_core PUBLIC hpRenderer_opengl glfw)
+target_compile_definitions(hpRenderer_core PRIVATE
+    HPRENDERER_BUILD_DIR="${PROJECT_BINARY_DIR}"
+    HPRENDERER_SOURCE_SHADER_DIR="${PROJECT_SOURCE_DIR}/shaders")
 
 add_library(hpRenderer_editor STATIC
     src/editor/panels/RendererStatisticsPanel.cpp
@@ -159,6 +162,12 @@ include(cmake/RuntimeBundle.cmake)
 # These tests deliberately avoid creating an OpenGL context. They protect the
 # scene-level behavior that the renderer refactor will move between modules.
 if(BUILD_TESTING)
+    add_executable(hpRenderer_shader_path_tests tests/ShaderPathTests.cpp src/core/RuntimePaths.cpp)
+    target_include_directories(hpRenderer_shader_path_tests PRIVATE include)
+    target_compile_definitions(hpRenderer_shader_path_tests PRIVATE
+        HPRENDERER_BUILD_DIR="${PROJECT_BINARY_DIR}"
+        HPRENDERER_SOURCE_SHADER_DIR="${PROJECT_SOURCE_DIR}/shaders")
+    add_test(NAME shader_paths COMMAND hpRenderer_shader_path_tests)
     add_executable(hpRenderer_profiler_tests tests/RenderProfilerTests.cpp)
     target_link_libraries(hpRenderer_profiler_tests PRIVATE hpRenderer_opengl)
     add_test(NAME render_profiler COMMAND hpRenderer_profiler_tests)

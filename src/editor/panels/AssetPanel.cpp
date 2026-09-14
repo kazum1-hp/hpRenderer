@@ -298,12 +298,29 @@ bool AssetPanel::draw(Scene& scene, unsigned int dialogDockId)
     ImGui::NewLine();
     ImGui::SeparatorText("Environment");
     auto& environment = scene.GetEnvironment();
+    auto& lighting = environment.lighting;
+    int lightingMode = static_cast<int>(lighting.mode);
+    if (ImGui::Combo("Ambient Lighting", &lightingMode, "None\0Hemisphere\0IBL\0"))
+        lighting.mode = static_cast<AmbientLightingMode>(lightingMode);
+    if (lighting.mode == AmbientLightingMode::Hemisphere)
+    {
+        ImGui::SliderFloat("Ambient Intensity", &lighting.hemisphereIntensity, 0.0f, 2.0f);
+        ImGui::ColorEdit3("Sky Color", &lighting.skyColor.x);
+        ImGui::ColorEdit3("Ground Color", &lighting.groundColor.x);
+        ImGui::TextWrapped("Lights surfaces without an HDR image. Keep this subtle to preserve sun shadow contrast.");
+    }
+    else if (lighting.mode == AmbientLightingMode::IBL)
+    {
+        ImGui::SliderFloat("IBL Intensity", &lighting.iblIntensity, 0.0f, 5.0f);
+        if (environment.mode != EnvironmentMode::IBL || !environment.asset)
+            ImGui::TextWrapped("IBL needs an HDR environment: choose HDR below and load an HDR image.");
+    }
     int environmentMode = static_cast<int>(environment.mode);
-    if (ImGui::Combo("Environment Mode", &environmentMode, "HDR / IBL\0Six Images (no IBL)\0Disabled\0"))
+    if (ImGui::Combo("Environment Mode", &environmentMode, "HDR\0Six Images\0Disabled\0"))
         environment.mode = static_cast<EnvironmentMode>(environmentMode);
     if (environment.mode == EnvironmentMode::SixFaces)
     {
-        ImGui::TextWrapped("Background only; IBL lighting is disabled. Face order: +X -X +Y -Y +Z -Z.");
+        ImGui::TextWrapped("Background only; choose Hemisphere above for ambient lighting. Face order: +X -X +Y -Y +Z -Z.");
         ImGui::TextWrapped("Named files: +X=px, -X=nx, +Y=py, -Y=ny, +Z=pz, -Z=nz. Camera forward is normally -Z.");
         const char* labels[] = {"+X Right", "-X Left", "+Y Top", "-Y Bottom", "+Z Front", "-Z Back"};
         for (int i = 0; i < 6; ++i)

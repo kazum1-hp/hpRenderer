@@ -16,6 +16,7 @@ private:
     ColorSpace colorSpace = ColorSpace::Linear;
     bool valid = false;
     bool transparent = false;
+    bool translucent = false;
     void upload(const void* pixels, int width, int height, int channels);
 
 public:
@@ -38,7 +39,7 @@ public:
 
     Texture(Texture&& other) noexcept
         : ID(other.ID), path(std::move(other.path)), type(other.type), colorSpace(other.colorSpace), valid(other.valid),
-          transparent(other.transparent)
+          transparent(other.transparent), translucent(other.translucent)
     {
         other.ID = 0;
         other.valid = false;
@@ -55,6 +56,7 @@ public:
             colorSpace = other.colorSpace;
             valid = other.valid;
             transparent = other.transparent;
+            translucent = other.translucent;
             other.ID = 0;
             other.valid = false;
         }
@@ -83,5 +85,7 @@ public:
         return valid && ID != 0;
     }
     bool hasTransparency() const { return transparent; }
+    // Legacy alpha inference: ignore a small fringe of intermediate alpha on cutouts.
+    bool hasTranslucency() const { return translucent; }
     ~Texture();
 };

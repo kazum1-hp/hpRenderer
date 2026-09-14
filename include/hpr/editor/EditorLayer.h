@@ -16,7 +16,7 @@ public:
     EditorLayer& operator=(const EditorLayer&) = delete;
     void initialize(GLFWwindow* window);
     void shutdown();
-    void beginFrame();
+    void beginFrame(bool cameraMouseCaptured = false);
     void draw(Scene& scene, RenderSettings& settings, const RenderOutput& output,
         InputManager& input, const std::function<void()>& restoreShaderBindings);
     void endFrame();

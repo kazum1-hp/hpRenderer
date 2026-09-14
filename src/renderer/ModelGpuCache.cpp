@@ -13,6 +13,7 @@ GpuRenderScene ModelGpuCache::prepare(const RenderScene& scene)
     prepared.environment = scene.environment;
     prepared.skybox = scene.skybox;
     prepared.environmentMode = scene.environmentMode;
+    prepared.ambientLighting = scene.ambientLighting;
     for (const auto& item : scene.objects)
     {
         if (!item.model || !item.model->isValid())

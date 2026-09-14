@@ -46,7 +46,8 @@ void InputManager::handleCursor(GLFWwindow* window)
 	if (altNow != altPressed)
 		altPressed = altNow;
 
-	if (altPressed || captureState.mouseCaptured) {
+	if (altPressed || captureState.mouseCaptured || !captureState.viewportHovered ||
+		!glfwGetWindowAttrib(window, GLFW_FOCUSED)) {
 		if (!cursorVisible) {
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 			cursorVisible = true;

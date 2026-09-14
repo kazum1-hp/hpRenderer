@@ -54,7 +54,12 @@ GpuModel::GpuModel(const Model& model, TextureLoader& loader, bool refreshTextur
             {
                 if (material.inferAlphaFromTextures && (ref.semantic == Diffuse || ref.semantic == Opacity) &&
                     texture->hasTransparency())
-                    material.alphaMode = AlphaMode::Blend;
+                {
+                    // Explicit material opacity and any translucent texture win.
+                    // Cutouts must write depth, including fully opaque atlas regions.
+                    if (material.alphaMode != AlphaMode::Blend)
+                        material.alphaMode = texture->hasTranslucency() ? AlphaMode::Blend : AlphaMode::Mask;
+                }
                 textures.push_back(std::move(texture));
             }
             else

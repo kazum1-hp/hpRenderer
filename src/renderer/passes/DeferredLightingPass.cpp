@@ -42,7 +42,13 @@ void DeferredLightingPass::execute(const GpuRenderScene &scene, const RenderPass
                                    const FrameBuffer &gbuffer, const FrameBuffer &output, const Mesh &screenQuad)
 {
     lightPassShader->use();
-    lightPassShader->setUniform("useIBL", context.environment.irradianceMap != 0);
+    const auto& ambient = scene.ambientLighting;
+    lightPassShader->setUniform("useIBL", ambient.mode == AmbientLightingMode::IBL && context.environment.irradianceMap != 0);
+    lightPassShader->setUniform("useHemisphere", ambient.mode == AmbientLightingMode::Hemisphere);
+    lightPassShader->setUniform("hemisphereIntensity", ambient.hemisphereIntensity);
+    lightPassShader->setUniform("iblIntensity", ambient.iblIntensity);
+    lightPassShader->setUniform("ambientSkyColor", ambient.skyColor);
+    lightPassShader->setUniform("ambientGroundColor", ambient.groundColor);
     const auto &settings = context.settings;
     const auto &camera = context.camera;
     const auto &frame = context.frame;

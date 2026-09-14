@@ -419,6 +419,48 @@ namespace
         Camera camera;
         const auto firstCamera = BuildCameraData(camera, {64, 48});
         {
+            auto ambientScene = first;
+            ambientScene.environmentMode = EnvironmentMode::Disabled;
+            ambientScene.ambientLighting.mode = AmbientLightingMode::Hemisphere;
+            ambientScene.ambientLighting.skyColor = glm::vec3(1);
+            ambientScene.ambientLighting.groundColor = glm::vec3(0.25f);
+            CameraData ambientCamera;
+            ambientCamera.position = glm::vec3(0, 0, 3);
+            ambientCamera.view = glm::lookAt(ambientCamera.position, glm::vec3(0), glm::vec3(0, 1, 0));
+            ambientCamera.projection = glm::perspective(glm::radians(45.0f), 64.0f / 48.0f, .1f, 100.0f);
+            float forwardBrightness = 0;
+            for (bool deferred : {false, true})
+            {
+                RenderSettings ambientSettings;
+                ambientSettings.deferred = deferred;
+                auto sample = [&]() {
+                    auto output = renderer.render(ambientScene, ambientCamera, ambientSettings, {0, false, false});
+                    verifyOutput(output, {64, 48});
+                    return readPixel(output.colorTexture, output.extent)[0];
+                };
+                ambientScene.ambientLighting.mode = AmbientLightingMode::Hemisphere;
+                ambientScene.ambientLighting.hemisphereIntensity = 0.5f;
+                const float lit = sample();
+                require(lit > .1f, "hemisphere must light geometry without HDR or direct lights");
+                if (!deferred) forwardBrightness = lit;
+                else require(std::abs(lit - forwardBrightness) < .02f, "hemisphere forward/deferred mismatch");
+                ambientScene.ambientLighting.hemisphereIntensity = 0;
+                require(sample() < .01f, "zero hemisphere intensity must remove ambient");
+                ambientScene.ambientLighting.hemisphereIntensity = 0.5f;
+                ambientScene.ambientLighting.mode = AmbientLightingMode::None;
+                require(sample() < .01f, "None retained hemisphere lighting");
+                ambientScene.environmentMode = EnvironmentMode::IBL;
+                ambientScene.environment = resources.LoadEnvironment((fixture.directory / "environment.hdr").generic_u8string());
+                ambientScene.ambientLighting.mode = AmbientLightingMode::IBL;
+                ambientScene.ambientLighting.iblIntensity = 1;
+                require(sample() > .1f, "IBL must light geometry");
+                ambientScene.ambientLighting.iblIntensity = 0;
+                require(sample() < .01f, "zero IBL intensity retained lighting");
+                ambientScene.environmentMode = EnvironmentMode::Disabled;
+            }
+            std::cout << "Ambient lighting pixel checks passed.\n";
+        }
+        {
             auto statisticsScene = first;
             statisticsScene.environmentMode = EnvironmentMode::Disabled;
             RenderSettings measured;

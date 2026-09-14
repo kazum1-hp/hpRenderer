@@ -64,7 +64,13 @@ void ForwardPass::execute(const GpuRenderScene &scene, const RenderPassContext &
     modelShader->use();
 
     modelShader->setUniform("time", frame.timeSeconds);
-    modelShader->setUniform("useIBL", context.environment.irradianceMap != 0);
+    const auto& ambient = scene.ambientLighting;
+    modelShader->setUniform("useIBL", ambient.mode == AmbientLightingMode::IBL && context.environment.irradianceMap != 0);
+    modelShader->setUniform("useHemisphere", ambient.mode == AmbientLightingMode::Hemisphere);
+    modelShader->setUniform("hemisphereIntensity", ambient.hemisphereIntensity);
+    modelShader->setUniform("iblIntensity", ambient.iblIntensity);
+    modelShader->setUniform("ambientSkyColor", ambient.skyColor);
+    modelShader->setUniform("ambientGroundColor", ambient.groundColor);
 
     // transform matrix
     modelShader->setUniform("view", camera.view);

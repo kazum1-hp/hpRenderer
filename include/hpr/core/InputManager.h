@@ -38,7 +38,7 @@ private:
 
 	bool requestClose = false;
 
-	bool parallelLightOn = false;
+	bool parallelLightOn = true;
 	bool pointLightOn = false;
 	//bool spotLightOn = true;
 	bool firstMouse = true;
@@ -51,8 +51,7 @@ private:
 	bool lastPointKey = false;
 	bool lastSpotKey = false;
 
-	bool cursorVisible = false;
+	bool cursorVisible = true;
 	bool altPressed = false;
 	InputCaptureState captureState;
 };
-

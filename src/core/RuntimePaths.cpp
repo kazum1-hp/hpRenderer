@@ -7,6 +7,21 @@
 #include <string>
 #include <vector>
 
+std::filesystem::path ResolveShaderDirectory(const std::filesystem::path& executableDirectory)
+{
+    const auto directory = std::filesystem::weakly_canonical(executableDirectory);
+#if defined(HPRENDERER_BUILD_DIR) && defined(HPRENDERER_SOURCE_SHADER_DIR)
+    const auto buildDirectory = std::filesystem::weakly_canonical(
+        std::filesystem::u8path(HPRENDERER_BUILD_DIR));
+    const auto sourceShaders = std::filesystem::u8path(HPRENDERER_SOURCE_SHADER_DIR);
+    // Supported layouts are build/{Debug,Release} and build/bin. Never let an
+    // installed copy silently load shaders from the developer's checkout.
+    if (directory.parent_path() == buildDirectory && std::filesystem::is_directory(sourceShaders))
+        return sourceShaders;
+#endif
+    return (directory / "../shaders").lexically_normal();
+}
+
 void SetExecutableWorkingDirectory()
 {
     std::vector<wchar_t> path(32768);

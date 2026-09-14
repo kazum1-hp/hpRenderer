@@ -4,6 +4,7 @@
 #include <cstddef>
 #include "hpr/assets/Model.h"
 #include "hpr/scene/Light.h"
+#include "hpr/scene/AmbientLighting.h"
 #include "hpr/scene/Transform.h"
 #include "hpr/scene/Material.h"
 #include "hpr/renderer/RenderLimits.h"
@@ -22,6 +23,7 @@ struct Environment
     std::shared_ptr<const EnvironmentAsset> asset;
     std::shared_ptr<const SkyboxAsset> skybox;
     EnvironmentMode mode = EnvironmentMode::IBL;
+    AmbientLighting lighting;
 };
 
 class Scene {

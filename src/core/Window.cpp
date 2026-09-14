@@ -41,7 +41,7 @@ Window::Window(const char* title, InputManager& inputManager, int width, int hei
 	glfwSetWindowUserPointer(window, this);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 	glfwSetCursorPosCallback(window, cursor_position_callback);
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Mouse Capture
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	glfwSetScrollCallback(window, scroll_callback);
 }
 

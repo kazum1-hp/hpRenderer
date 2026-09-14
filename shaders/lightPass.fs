@@ -44,6 +44,11 @@ uniform sampler2D gDepth;
 
 uniform samplerCube irradianceMap;
 uniform bool useIBL;
+uniform bool useHemisphere;
+uniform float hemisphereIntensity;
+uniform float iblIntensity;
+uniform vec3 ambientSkyColor;
+uniform vec3 ambientGroundColor;
 uniform samplerCube prefilterMap;
 uniform sampler2D brdfLUT;
 
@@ -117,6 +122,12 @@ void main()
 	vec3 parallelColor = CalParallelLight(parallelLight, norm, viewDir, parallelLightDir, albedo, parallelShadow, roughness, metallic);
 
     vec3 ambient = vec3(0.0);
+    if (useHemisphere)
+    {
+        float skyWeight = clamp(norm.y * 0.5 + 0.5, 0.0, 1.0);
+        vec3 hemisphere = mix(ambientGroundColor, ambientSkyColor, skyWeight);
+        ambient = hemisphere * max(hemisphereIntensity, 0.0) * albedo * (1.0 - metallic) * ao;
+    }
 
     if (useIBL)
     {
@@ -137,7 +148,7 @@ void main()
         vec2 brdf  = texture(brdfLUT, vec2(max(dot(norm, viewDir), 0.0), roughness)).rg;
         vec3 amSpecular = prefilteredColor * (kS * brdf.x + brdf.y);
 
-        ambient = (kD * amDiffuse + amSpecular) * ao;
+        ambient = (kD * amDiffuse + amSpecular) * ao * max(iblIntensity, 0.0);
     }
 
 	vec3 textureColor = pointColor + parallelColor + ambient;

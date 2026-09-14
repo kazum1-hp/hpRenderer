@@ -2,6 +2,7 @@
 #include "hpr/assets/EnvironmentAsset.h"
 #include "hpr/assets/SkyboxAsset.h"
 #include "hpr/scene/Material.h"
+#include "hpr/scene/AmbientLighting.h"
 #include <glm/glm.hpp>
 #include <array>
 #include <memory>
@@ -51,6 +52,7 @@ template<class ModelType> struct BasicRenderScene
     std::shared_ptr<const EnvironmentAsset> environment;
     std::shared_ptr<const SkyboxAsset> skybox;
     EnvironmentMode environmentMode = EnvironmentMode::IBL;
+    AmbientLighting ambientLighting;
 };
 using RenderScene = BasicRenderScene<Model>;
 using GpuRenderScene = BasicRenderScene<GpuModel>;

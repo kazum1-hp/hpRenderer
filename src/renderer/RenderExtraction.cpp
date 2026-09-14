@@ -34,6 +34,7 @@ RenderScene BuildRenderScene(const Scene& scene)
     result.environment = scene.GetEnvironment().asset;
     result.skybox = scene.GetEnvironment().skybox;
     result.environmentMode = scene.GetEnvironment().mode;
+    result.ambientLighting = scene.GetEnvironment().lighting;
     return result;
 }
 

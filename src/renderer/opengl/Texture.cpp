@@ -40,12 +40,18 @@ void Texture::upload(const void* pixels, int width, int height, int channels)
         const auto* bytes = static_cast<const unsigned char*>(pixels);
         const int alphaChannel = type == Opacity ? 0 : channels - 1;
         const std::size_t count = static_cast<std::size_t>(width) * height;
+        std::size_t visible = 0, intermediate = 0;
         for (std::size_t i = 0; i < count; ++i)
-            if (bytes[i * channels + alphaChannel] < 255)
-            {
-                transparent = true;
-                break;
-            }
+        {
+            const unsigned char alpha = bytes[i * channels + alphaChannel];
+            transparent |= alpha < 255;
+            visible += alpha > 8;
+            intermediate += alpha > 8 && alpha < 247;
+        }
+        // Formats without alphaMode need a heuristic: binary alpha and narrow
+        // antialiased edges are cutouts. A substantial intermediate-alpha region
+        // is blended. Count visible texels so atlas padding cannot dilute it.
+        translucent = intermediate > visible / 20;
     }
 
     const GLenum formats[] = {GL_RED, GL_RG, GL_RGB, GL_RGBA};

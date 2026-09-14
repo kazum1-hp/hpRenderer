@@ -119,6 +119,43 @@ namespace
             require(!editor.captureState().viewportHovered && editor.captureState().keyboardCaptured,
                 "UI keyboard capture outside Scene must remain protected");
             ImGui::Render();
+
+            // GLFW's disabled cursor can travel beyond Scene in any direction.
+            // Camera capture must survive those virtual positions without
+            // activating controls in neighboring panels.
+            io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+            for (const ImVec2 position : {ImVec2(10, 400), ImVec2(800, 790),
+                ImVec2(-5000, 400), ImVec2(800, 5000)})
+            {
+                io.AddMousePosEvent(position.x, position.y);
+                ImGui::NewFrame();
+                io.WantCaptureKeyboard = true;
+                editor.draw(scene, settings, output, input, [] {});
+                require(editor.captureState().viewportHovered && !editor.captureState().mouseCaptured &&
+                    !editor.captureState().keyboardCaptured,
+                    "virtual cursor leaving Scene must not release camera capture");
+                require(ImGui::GetCurrentContext()->HoveredWindow == nullptr,
+                    "camera motion must not hover other panels");
+                ImGui::Render();
+            }
+            // Losing the render image must still release capture.
+            ImGui::NewFrame();
+            editor.draw(scene, settings, RenderOutput{}, input, [] {});
+            require(editor.captureState().mouseCaptured && !editor.captureState().viewportHovered,
+                "missing Scene output must release camera capture");
+            ImGui::Render();
+
+            io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+            for (const ImVec2 position : {ImVec2(10, 400), ImVec2(800, 790),
+                ImVec2(sceneWindow->Pos.x + 50, sceneWindow->Pos.y + 5)})
+            {
+                io.AddMousePosEvent(position.x, position.y);
+                ImGui::NewFrame();
+                editor.draw(scene, settings, output, input, [] {});
+                require(editor.captureState().mouseCaptured && !editor.captureState().viewportHovered,
+                    "released cursor outside Scene image must stay visible");
+                ImGui::Render();
+            }
         }
         ImGui::DestroyContext();
     }

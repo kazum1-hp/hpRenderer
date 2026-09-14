@@ -221,6 +221,70 @@ void run()
     const std::vector<unsigned char> rgba = {255, 0, 0, 255, 0, 255, 0, 0};
     Texture raw("raw embedded image", rgba, 2, 1, Diffuse, ColorSpace::SRGB);
     importRequire(raw.isValid() && raw.hasTransparency(), "raw embedded RGBA/alpha decode");
+    importRequire(!raw.hasTranslucency(), "binary alpha must remain a cutout");
+    std::vector<unsigned char> fringe(100 * 4, 255);
+    fringe[3] = 128;
+    Texture antialiased("cutout fringe", fringe, 100, 1, Diffuse, ColorSpace::SRGB);
+    importRequire(antialiased.hasTransparency() && !antialiased.hasTranslucency(),
+                  "small antialiased fringe must not make the whole atlas blended");
+    Texture moved(std::move(antialiased));
+    importRequire(moved.hasTransparency() && !moved.hasTranslucency(), "move lost cutout metadata");
+
+    // A legacy atlas has an unused transparent texel. The front face is submitted
+    // first, then an overlapping rear face in the SAME mesh: mesh sorting cannot
+    // fix this case. Both visible faces must write depth despite the atlas alpha.
+    auto writeAtlas = [&](unsigned char alpha) {
+        std::ofstream stream(fixture.directory / "atlas.tga", std::ios::binary);
+        unsigned char header[18]{};
+        header[2] = 2; header[12] = 4; header[14] = 1; header[16] = 32; header[17] = 8;
+        const unsigned char bgra[] = {0, 0, 255, alpha, 0, 0, 255, alpha,
+                                      0, 255, 0, alpha, 0, 0, 0, 0};
+        stream.write(reinterpret_cast<const char*>(header), sizeof(header));
+        stream.write(reinterpret_cast<const char*>(bgra), sizeof(bgra));
+    };
+    auto writeLegacyMesh = [&](bool hole) {
+        fixture.text("atlas.obj",
+                     std::string("mtllib atlas.mtl\nv -0.9 -0.9 0\nv 0.9 -0.9 0\nv 0 0.9 0\n") +
+                     "v -0.9 -0.9 0.4\nv 0.9 -0.9 0.4\nv 0 0.9 0.4\n" +
+                     (hole ? "vt 0.875 0.5\n" : "vt 0.125 0.5\n") +
+                     "vt 0.625 0.5\nusemtl surface\nf 1/1 2/1 3/1\nf 4/2 5/2 6/2\n");
+    };
+    fixture.text("atlas.mtl", "newmtl surface\nKd 1 1 1\nd 1\nmap_Kd atlas.tga\n");
+    writeAtlas(255);
+    writeLegacyMesh(false);
+    auto loadLegacy = [&]() {
+        auto result = std::make_shared<GpuModel>(Model(fixture.path("atlas.obj")), assets, true);
+        importRequire(result->isValid() && result->meshCount() == 1, "legacy overlapping-face fixture");
+        scene.objects[0].model = result;
+        return result;
+    };
+    auto legacy = loadLegacy();
+    const auto materialIndex = legacy->data().meshes[0].materialIndex;
+    importRequire(legacy->material(materialIndex).alphaMode == AlphaMode::Mask, "legacy atlas must use Mask");
+    settings.deferred = false;
+    gbuffer.execute(scene, context, *targets.gbuffer, *plane);
+    const auto front = pixel(*targets.gbuffer, 2);
+    importRequire(std::abs(depth(*targets.gbuffer) - .5f) < .01f && front[0] > .9f && front[1] < .01f,
+                  "rear face covered opaque atlas region in GBuffer");
+    forward.execute(scene, context, shadows, *targets.hdr, *plane);
+    importRequire(std::abs(depth(*targets.hdr) - .5f) < .01f, "legacy cutout lost forward depth");
+    writeLegacyMesh(true);
+    legacy = loadLegacy();
+    gbuffer.execute(scene, context, *targets.gbuffer, *plane);
+    const auto rear = pixel(*targets.gbuffer, 2);
+    importRequire(std::abs(depth(*targets.gbuffer) - .7f) < .01f && rear[1] > .9f && rear[0] < .01f,
+                  "cutout hole must reveal the rear face");
+    forward.execute(scene, context, shadows, *targets.hdr, *plane);
+    importRequire(std::abs(depth(*targets.hdr) - .7f) < .01f, "forward cutout hole wrote depth");
+    writeAtlas(128);
+    legacy = loadLegacy();
+    importRequire(legacy->material(materialIndex).alphaMode == AlphaMode::Blend,
+                  "substantial texture translucency must remain blended");
+    writeAtlas(255);
+    fixture.text("atlas.mtl", "newmtl surface\nKd 1 1 1\nd 0.5\nmap_Kd atlas.tga\n");
+    legacy = loadLegacy();
+    importRequire(legacy->material(materialIndex).alphaMode == AlphaMode::Blend,
+                  "explicit material opacity must override cutout inference");
     importRequire(glGetError() == GL_NO_ERROR, "model import/render generated an OpenGL error");
 }
 } // namespace

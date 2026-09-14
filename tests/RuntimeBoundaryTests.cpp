@@ -69,7 +69,8 @@ int main()
         require(camera.getFov() < initialFov, "viewport scroll");
         input.onMouseMove(100, 100);
         input.onMouseMove(110, 100);
-        require(camera.getFront() != front, "viewport mouse movement");
+        require(input.isCursorVisible() && camera.getFront() == front,
+            "visible cursor must not rotate camera before viewport capture");
 
         auto* originalOut = std::cout.rdbuf();
         auto* originalError = std::cerr.rdbuf();

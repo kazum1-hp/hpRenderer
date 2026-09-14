@@ -1,6 +1,7 @@
 #include "hpr/app/Application.h"
 #include "hpr/renderer/RenderExtraction.h"
 #include "hpr/assets/Model.h"
+#include "hpr/core/RuntimePaths.h"
 
 #include <iostream>
 #include <stdexcept>
@@ -39,21 +40,24 @@ void Application::init()
 	auto& res = assets;
 
 	// Load Shader
-	res.LoadShader(ShaderId::Model, "../shaders/model.vs", "../shaders/model.fs");
-    res.LoadShader(ShaderId::Light, "../shaders/light.vs", "../shaders/light.fs");
-    res.LoadShader(ShaderId::ToneMapping, "../shaders/framebuffer.vs", "../shaders/framebuffer.fs");
-    res.LoadShader(ShaderId::EnvironmentCapture, "../shaders/skybox.vs", "../shaders/skybox.fs");
-    res.LoadShader(ShaderId::DirectionalShadow, "../shaders/shadow.vs", "../shaders/shadow.fs");
-    res.LoadShader(ShaderId::PointShadow, "../shaders/pointShadow.vs", "../shaders/pointShadow.fs", "../shaders/pointShadow.gs");
-    res.LoadShader(ShaderId::BloomBlur, "../shaders/bloomBlur.vs", "../shaders/bloomBlur.fs");
-    res.LoadShader(ShaderId::GBuffer, "../shaders/gBuffer.vs", "../shaders/gBuffer.fs");
-    res.LoadShader(ShaderId::DeferredLighting, "../shaders/lightPass.vs", "../shaders/lightPass.fs");
-    res.LoadShader(ShaderId::Debug, "../shaders/debug.vs", "../shaders/debug.fs");
-    res.LoadShader(ShaderId::GBufferDebug, "../shaders/drawDebug.vs", "../shaders/drawDebug.fs");
-	res.LoadShader(ShaderId::Skybox, "../shaders/background.vs", "../shaders/background.fs");
-	res.LoadShader(ShaderId::Irradiance, "../shaders/irradiance.vs", "../shaders/irradiance.fs");
-	res.LoadShader(ShaderId::Prefilter, "../shaders/prefilter.vs", "../shaders/prefilter.fs");
-	res.LoadShader(ShaderId::Brdf, "../shaders/brdf.vs", "../shaders/brdf.fs");
+    const auto shaderDirectory = ResolveShaderDirectory(std::filesystem::current_path());
+    std::cout << "Shader directory: " << shaderDirectory.u8string() << std::endl;
+    const auto shaderPath = [&](const char* name) { return (shaderDirectory / name).u8string(); };
+	res.LoadShader(ShaderId::Model, shaderPath("model.vs"), shaderPath("model.fs"));
+    res.LoadShader(ShaderId::Light, shaderPath("light.vs"), shaderPath("light.fs"));
+    res.LoadShader(ShaderId::ToneMapping, shaderPath("framebuffer.vs"), shaderPath("framebuffer.fs"));
+    res.LoadShader(ShaderId::EnvironmentCapture, shaderPath("skybox.vs"), shaderPath("skybox.fs"));
+    res.LoadShader(ShaderId::DirectionalShadow, shaderPath("shadow.vs"), shaderPath("shadow.fs"));
+    res.LoadShader(ShaderId::PointShadow, shaderPath("pointShadow.vs"), shaderPath("pointShadow.fs"), shaderPath("pointShadow.gs"));
+    res.LoadShader(ShaderId::BloomBlur, shaderPath("bloomBlur.vs"), shaderPath("bloomBlur.fs"));
+    res.LoadShader(ShaderId::GBuffer, shaderPath("gBuffer.vs"), shaderPath("gBuffer.fs"));
+    res.LoadShader(ShaderId::DeferredLighting, shaderPath("lightPass.vs"), shaderPath("lightPass.fs"));
+    res.LoadShader(ShaderId::Debug, shaderPath("debug.vs"), shaderPath("debug.fs"));
+    res.LoadShader(ShaderId::GBufferDebug, shaderPath("drawDebug.vs"), shaderPath("drawDebug.fs"));
+	res.LoadShader(ShaderId::Skybox, shaderPath("background.vs"), shaderPath("background.fs"));
+	res.LoadShader(ShaderId::Irradiance, shaderPath("irradiance.vs"), shaderPath("irradiance.fs"));
+	res.LoadShader(ShaderId::Prefilter, shaderPath("prefilter.vs"), shaderPath("prefilter.fs"));
+	res.LoadShader(ShaderId::Brdf, shaderPath("brdf.vs"), shaderPath("brdf.fs"));
 
 	auto model3 = res.LoadModel("../assets/models/marble_bust_01_4k/marble_bust_01_4k.gltf");
 
@@ -111,7 +115,7 @@ void Application::run()
 		const RenderFrameData frame{currentFrame, input.isParallelLightOn(), input.isPointLightOn()};
 		const auto output = renderer.render(BuildRenderScene(mainScene),
 			BuildCameraData(camera, extent), renderSettings, frame);
-		editor.beginFrame();
+		editor.beginFrame(!input.isCursorVisible());
 		editor.draw(mainScene, renderSettings, output, input,
 			[this] { renderer.restoreShaderBindings(); });
         editor.drawStatistics(renderer.statistics(), frameMs, previousCpuMs);

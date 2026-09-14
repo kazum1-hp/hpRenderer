@@ -99,8 +99,15 @@ void EditorLayer::shutdown()
     inputCapture = {};
 }
 
-void EditorLayer::beginFrame()
+void EditorLayer::beginFrame(bool cameraMouseCaptured)
 {
+    // Disabled GLFW cursors report unbounded virtual coordinates. They belong
+    // to camera navigation, not ImGui hit testing on adjacent panels.
+    auto& io = ImGui::GetIO();
+    if (cameraMouseCaptured)
+        io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+    else
+        io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -124,13 +131,15 @@ void EditorLayer::draw(Scene& scene, RenderSettings& settings, const RenderOutpu
     console.draw();
     viewport.draw(output, settings);
     const auto& io = ImGui::GetIO();
+    const bool viewportActive = viewport.isHovered() ||
+        ((io.ConfigFlags & ImGuiConfigFlags_NoMouse) && viewport.isAvailable());
     // Scene is itself an ImGui window: navigation may request keyboard capture
     // even though the user intends to control the camera. Keep active controls
     // and text entry protected, but otherwise let the hovered viewport use keys.
     const bool keyboardCaptured = io.WantTextInput || ImGui::IsAnyItemActive() ||
-        (io.WantCaptureKeyboard && !viewport.isHovered());
-    inputCapture = {io.WantCaptureMouse && !viewport.isHovered(),
-        keyboardCaptured, viewport.isHovered()};
+        (io.WantCaptureKeyboard && !viewportActive);
+    inputCapture = {!viewportActive,
+        keyboardCaptured, viewportActive};
 }
 
 void EditorLayer::endFrame()

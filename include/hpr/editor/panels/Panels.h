@@ -73,8 +73,10 @@ public:
     void refreshDebugLabels(const AssetManager& resources);
     RenderExtent requestedExtent() const { return requestedSize; }
     bool isHovered() const { return hovered; }
+    bool isAvailable() const { return available; }
 private:
     RenderExtent requestedSize;
     bool hovered = false;
+    bool available = false;
     std::array<std::string, 4> debugLabels = { "Normal", "Roughness", "Metallic", "Depth" };
 };

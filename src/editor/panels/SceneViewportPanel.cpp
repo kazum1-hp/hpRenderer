@@ -133,6 +133,8 @@ void SceneViewportPanel::refreshDebugLabels(const AssetManager& resources)
 
 void SceneViewportPanel::draw(const RenderOutput& renderOutput, const RenderSettings& settings)
 {
+    hovered = false;
+    available = false;
     // ------------ Scene ----------------
     if (!ImGui::Begin("Scene"))
     {
@@ -142,7 +144,6 @@ void SceneViewportPanel::draw(const RenderOutput& renderOutput, const RenderSett
     }
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
 
-    hovered = ImGui::IsWindowHovered();
     ImVec2 size = ImGui::GetContentRegionAvail();
 
     // A collapsed/tiny panel must never turn a negative float into a huge unsigned size.
@@ -165,6 +166,8 @@ void SceneViewportPanel::draw(const RenderOutput& renderOutput, const RenderSett
             ImVec2(0, 1),   // flip vertically
             ImVec2(1, 0)
         );
+        available = true;
+        hovered = ImGui::IsItemHovered();
         if (settings.drawGBufferDebug && settings.deferred)
         {
             ImDrawList* drawList = ImGui::GetWindowDrawList();
