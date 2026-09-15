@@ -86,6 +86,7 @@ void ForwardPass::execute(const GpuRenderScene &scene, const RenderPassContext &
     modelShader->setUniform("parallelLight.intensity", scene.directionalLight.intensity);
     modelShader->setUniform("parallelLight.enabled", directionalLightEnabled);
     modelShader->setUniform("lightSpaceMatrix", context.lightSpaceMatrix);
+    modelShader->setUniform("directionalShadowInvDepthRange", 1.0f / context.directionalShadowDepthRange);
     modelShader->setUniform("parallelShadows", directionalShadowEnabled);
     modelShader->setUniform("pointShadows", pointShadowEnabled);
     modelShader->setUniform("pointLightCount", static_cast<int>(pointLightCount));

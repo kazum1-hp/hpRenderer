@@ -100,6 +100,7 @@ void DeferredLightingPass::execute(const GpuRenderScene &scene, const RenderPass
     lightPassShader->setUniform("parallelLight.intensity", scene.directionalLight.intensity);
     lightPassShader->setUniform("parallelLight.enabled", directionalLightEnabled);
     lightPassShader->setUniform("lightSpaceMatrix", context.lightSpaceMatrix);
+    lightPassShader->setUniform("directionalShadowInvDepthRange", 1.0f / context.directionalShadowDepthRange);
     lightPassShader->setUniform("parallelShadows", directionalShadowEnabled);
     lightPassShader->setUniform("pointShadows", pointShadowEnabled);
     lightPassShader->setUniform("pointLightCount", static_cast<int>(pointLightCount));

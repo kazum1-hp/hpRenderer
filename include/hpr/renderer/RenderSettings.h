@@ -28,6 +28,7 @@ struct RenderSettings
 {
     bool deferred = false;
     bool shadows = false;
+    float directionalShadowDistance = 100.0f; // Camera-space distance in world units.
     bool drawLights = false;
     bool drawGBufferDebug = false;
 

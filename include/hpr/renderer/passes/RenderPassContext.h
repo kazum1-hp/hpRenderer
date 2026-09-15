@@ -19,6 +19,7 @@ struct RenderPassContext
     EnvironmentGpuView environment;
     glm::mat4 lightSpaceMatrix;
     RenderExtent extent;
+    float directionalShadowDepthRange = 49.0f;
 };
 
 struct ShadowMapView

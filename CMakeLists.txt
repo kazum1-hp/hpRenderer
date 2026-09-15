@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(hpRenderer)
+project(hpRenderer VERSION 1.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -108,6 +108,7 @@ add_library(hpRenderer_core STATIC
     src/assets/AssetManager.cpp
     src/renderer/Renderer.cpp
     src/renderer/RenderExtraction.cpp
+    src/renderer/DirectionalShadow.cpp
     src/renderer/RenderTargets.cpp
     src/renderer/RenderPipeline.cpp
     src/renderer/ModelGpuCache.cpp
@@ -162,6 +163,9 @@ include(cmake/RuntimeBundle.cmake)
 # These tests deliberately avoid creating an OpenGL context. They protect the
 # scene-level behavior that the renderer refactor will move between modules.
 if(BUILD_TESTING)
+    add_executable(hpRenderer_directional_shadow_tests tests/DirectionalShadowTests.cpp src/renderer/DirectionalShadow.cpp)
+    target_include_directories(hpRenderer_directional_shadow_tests PRIVATE include third_party/glm)
+    add_test(NAME directional_shadow COMMAND hpRenderer_directional_shadow_tests)
     add_executable(hpRenderer_shader_path_tests tests/ShaderPathTests.cpp src/core/RuntimePaths.cpp)
     target_include_directories(hpRenderer_shader_path_tests PRIVATE include)
     target_compile_definitions(hpRenderer_shader_path_tests PRIVATE

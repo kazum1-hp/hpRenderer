@@ -16,6 +16,16 @@ bool Model::reload(const std::string& path)
     }
     for (const auto& warning : replacement->warnings)
         std::cerr << "[Model] " << warning << '\n';
+    Bounds replacementBounds;
+    for (const auto& draw : replacement->draws)
+    {
+        const auto& vertices = replacement->meshes[draw.meshIndex].vertices;
+        const auto& transform = replacement->nodes[draw.nodeIndex].worldTransform;
+        for (std::size_t i = 0; i + 2 < vertices.size(); i += 14)
+            replacementBounds.include(glm::vec3(transform *
+                glm::vec4(vertices[i], vertices[i + 1], vertices[i + 2], 1.0f)));
+    }
+    bounds = replacementBounds;
     asset = std::move(replacement);
     ++revision;
     return true;

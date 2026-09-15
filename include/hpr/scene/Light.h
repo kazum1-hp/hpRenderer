@@ -33,12 +33,6 @@ public:
 		return intensity;
 	}
 
-	glm::mat4 getOrthoViewMatrix() const {
-		return glm::lookAt(-direction * distance, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	}
-	glm::mat4 getOrthoMatrix() const {
-		return glm::ortho(-orthoRange, orthoRange, -orthoRange, orthoRange, nearPlane, farPlane);
-	}
 	glm::mat4 getPerspTransMatrix(unsigned int i) const {
 		std::array<glm::mat4, 6> shadowTransforms = CalculateCubemapMatrices(position, near, far);
 
@@ -57,11 +51,6 @@ private:
 	glm::vec3 position;
 	glm::vec3 direction;
 	float intensity;
-
-	//ortho matrix
-	float orthoRange = 10.0f;
-	float nearPlane = 1.0f, farPlane = 50.0f;
-	float distance = 10.0f;
 
 	//projection matrix
 	float near = 1.0f, far = 30.0f;

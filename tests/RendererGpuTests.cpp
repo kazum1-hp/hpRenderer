@@ -201,6 +201,48 @@ namespace
         }
     };
 
+    void directionalShadowPixelTests(Renderer& renderer, const std::filesystem::path& directory)
+    {
+        const auto path = directory / "shadow-caster.obj";
+        {
+            std::ofstream obj(path);
+            // Two windings make this thin test occluder visible to front-face culling.
+            obj << "v -1 -1 0\nv 1 -1 0\nv 0 1 0\nvn 0 0 1\nf 1//1 2//1 3//1\nf 3//1 2//1 1//1\n";
+        }
+        const auto receiver = std::make_shared<Model>((directory / "triangle.obj").generic_string());
+        const auto caster = std::make_shared<Model>(path.generic_string());
+        require(receiver->getBounds().valid() && caster->getBounds().valid(), "missing imported shadow bounds");
+        for (bool deferred : {false, true})
+            for (float offset : {0.0f, 300.0f})
+            {
+                RenderScene scene;
+                scene.environmentMode = EnvironmentMode::Disabled;
+                scene.directionalLight.direction = {0, 0, -1};
+                scene.objects.push_back({receiver, glm::translate(glm::mat4(1), {offset, 0, 0}) *
+                    glm::scale(glm::mat4(1), glm::vec3(10)), {}});
+                // Behind the camera and well outside the old fixed 1..50 depth range.
+                scene.objects.push_back({caster, glm::translate(glm::mat4(1), {offset, 0, 200}) *
+                    glm::scale(glm::mat4(1), glm::vec3(3)), {}});
+                CameraData camera;
+                camera.position = {offset, 0, 5};
+                camera.nearPlane = 0.1f;
+                camera.farPlane = 1000;
+                camera.view = glm::lookAt(camera.position, glm::vec3(offset, 0, 0), glm::vec3(0, 1, 0));
+                camera.projection = glm::perspective(glm::radians(45.0f), 64.0f / 48.0f, 0.1f, 1000.0f);
+                RenderSettings settings;
+                settings.deferred = deferred;
+                settings.directionalShadowDistance = 30;
+                auto output = renderer.render(scene, camera, settings, {0, true, false});
+                const auto lit = readPixel(output.colorTexture, output.extent);
+                settings.shadows = true;
+                output = renderer.render(scene, camera, settings, {0, true, false});
+                verifyOutput(output, {64, 48});
+                const auto shadow = readPixel(output.colorTexture, output.extent);
+                require(lit[0] > shadow[0] + 0.1f, "off-camera caster failed to shadow the receiver after camera movement");
+            }
+        std::cout << "Directional shadow pixel checks passed.\n";
+    }
+
     PFNGLCREATESHADERPROC originalCreateShader;
     PFNGLCREATEPROGRAMPROC originalCreateProgram;
     std::vector<GLuint> createdShaders, createdPrograms;
@@ -282,6 +324,7 @@ namespace
 
         Renderer renderer; // No Window, InputManager, mutable Camera or bound Scene.
         renderer.init(resources, {64, 48});
+        directionalShadowPixelTests(renderer, fixture.directory);
         postProcessPassTests(resources);
         pipelineOrderTests(renderer);
         {

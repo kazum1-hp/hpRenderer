@@ -54,7 +54,7 @@ set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT Runtime)
 include(InstallRequiredSystemLibraries)
 set(CPACK_GENERATOR ZIP)
 set(CPACK_PACKAGE_NAME hpRenderer)
-set(CPACK_PACKAGE_VERSION "dev")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_FILE_NAME "hpRenderer-windows-x64")
 set(CPACK_COMPONENTS_ALL Runtime)
 # ZIP is monolithic by default; explicitly choose Runtime instead of installing ALL components.

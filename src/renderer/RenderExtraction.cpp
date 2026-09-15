@@ -14,8 +14,7 @@ RenderScene BuildRenderScene(const Scene& scene)
     }
     const auto& directional = scene.GetDirLight();
     result.directionalLight = {directional.getColor(), directional.getLightDir(),
-        directional.getIntensity(), directional.lightOn(),
-        directional.getOrthoMatrix() * directional.getOrthoViewMatrix()};
+        directional.getIntensity(), directional.lightOn()};
     const auto count = std::min(scene.GetPointLights().size(), RenderLimits::MaxPointLights);
     result.pointLights.reserve(count);
     for (std::size_t i = 0; i < count; ++i)

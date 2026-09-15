@@ -1,5 +1,6 @@
 #pragma once
 #include "hpr/assets/ModelAsset.h"
+#include "hpr/assets/Bounds.h"
 #include <memory>
 #include <cstdint>
 
@@ -29,8 +30,10 @@ public:
     {
         return revision;
     }
+    const Bounds& getBounds() const { return bounds; }
 
 private:
     std::shared_ptr<const ModelAsset> asset = std::make_shared<ModelAsset>();
     std::uint64_t revision = 0;
+    Bounds bounds;
 };

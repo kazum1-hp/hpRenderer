@@ -13,6 +13,8 @@ void RenderSettingsPanel::draw(RenderSettings& settings, InputManager& input)
     ImGui::Checkbox("useShadow", &settings.shadows);
     ImGui::SameLine();
     ImGui::Checkbox("drawLights", &settings.drawLights);
+    if (settings.shadows)
+        ImGui::SliderFloat("Sun Shadow Distance", &settings.directionalShadowDistance, 1.0f, 1000.0f, "%.1f");
 
     ImGui::Checkbox("drawPlane", &settings.groundPlane.visible);
 

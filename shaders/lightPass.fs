@@ -58,6 +58,7 @@ uniform vec3 viewPos;
 uniform bool useQuadratic;
 
 uniform bool parallelShadows;
+uniform float directionalShadowInvDepthRange;
 uniform bool pointShadows;
 
 const float PI = 3.14159265359;
@@ -198,6 +199,8 @@ float ShadowCalculation(vec4 FragPosLightSpace, vec3 n)
     vec3 projCoords = FragPosLightSpace.xyz / FragPosLightSpace.w;
     // transform to [0,1] range
     projCoords = projCoords * 0.5 + 0.5;
+    if (any(lessThan(projCoords, vec3(0.0))) || any(greaterThan(projCoords, vec3(1.0))))
+        return 0.0;
 
     // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
     float closestDepth = texture(depthMap, projCoords.xy).r;
@@ -205,7 +208,8 @@ float ShadowCalculation(vec4 FragPosLightSpace, vec3 n)
     float currentDepth = projCoords.z;
     // calculate bias (based on depth map resolution and slope)
     vec3 lightDir = normalize(-parallelLight.direction);
-    float bias = max(0.01 * (1.0 - dot(n, lightDir)), 0.001);
+    // World-space bias stays constant as the fitted depth range changes.
+    float bias = max(0.05 * (1.0 - dot(n, lightDir)), 0.005) * directionalShadowInvDepthRange;
     // check whether current frag pos is in shadow
     // float shadow = currentDepth - bias > closestDepth  ? 1.0 : 0.0;
     // PCF

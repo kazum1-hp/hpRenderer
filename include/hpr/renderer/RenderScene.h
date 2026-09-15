@@ -27,7 +27,6 @@ struct DirectionalLightData
     glm::vec3 direction{0.0f, -1.0f, 0.0f};
     float intensity = 1.0f;
     bool enabled = true;
-    glm::mat4 lightSpaceMatrix{1.0f};
 };
 
 struct PointLightData

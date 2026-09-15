@@ -3,6 +3,7 @@
 #include "hpr/assets/AssetManager.h"
 #include "hpr/renderer/opengl/PrimitiveMeshes.h"
 #include "hpr/renderer/opengl/RenderProfiler.h"
+#include "hpr/renderer/DirectionalShadow.h"
 #include <iostream>
 
 namespace Rendering
@@ -32,8 +33,22 @@ RenderOutput RenderPipeline::render(const RenderScene &source, const CameraData 
         scene = models.prepare(source);
         targets.syncPointShadows(PointLightCount(scene), ShadowSize);
     }
-    const RenderPassContext context{camera,      settings, frame, environment, scene.directionalLight.lightSpaceMatrix,
-                                    renderExtent};
+    scene.directionalLight.direction = NormalizeLightDirection(scene.directionalLight.direction);
+    DirectionalShadowProjection sunShadow;
+    if (settings.shadows && frame.directionalLightEnabled && scene.directionalLight.enabled)
+    {
+        std::vector<Bounds> casters;
+        casters.reserve(source.objects.size() + 1);
+        for (const auto& object : source.objects)
+            if (object.model)
+                casters.push_back(object.model->getBounds().transformed(object.transform));
+        if (settings.groundPlane.visible)
+            casters.push_back({glm::vec3(-25, -5.5f, -25), glm::vec3(25, -5.5f, 25)});
+        sunShadow = BuildDirectionalShadowProjection(camera, scene.directionalLight.direction,
+            settings.directionalShadowDistance, ShadowSize, casters);
+    }
+    const RenderPassContext context{camera, settings, frame, environment, sunShadow.matrix,
+                                    renderExtent, sunShadow.depthRange};
     const ShadowMapView shadows{*targets.directionalShadow, targets.pointShadows};
 
     if (settings.shadows)
