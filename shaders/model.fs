@@ -93,6 +93,9 @@ uniform float time;
 
 uniform bool parallelShadows;
 uniform float directionalShadowInvDepthRange;
+uniform float directionalShadowDistance;
+uniform vec4 directionalShadowCameraDepth;
+uniform mat3 directionalShadowNormalMatrix;
 uniform bool pointShadows;
 
 const float PI = 3.14159265359;
@@ -109,7 +112,7 @@ vec3 gridSamplingDisk[20] = vec3[]
 vec3 CalParallelLight(ParallelLight parallelLight, vec3 norm, vec3 viewDir, vec3 parallelLightDir, vec3 texColor, float parallelShadow, float roughness, float metallic);
 vec3 CalPointLight(PointLight pointLight, vec3 norm, vec3 viewDir, vec3 pointLightDir, vec3 texColor, float pointShadow, float roughness, float metallic);
 
-float ShadowCalculation(vec4 FragPosLightSpace, vec3 n);
+float ShadowCalculation(vec4 FragPosLightSpace, vec3 worldPos);
 float PointShadowCalculation(vec3 fragPos, vec3 normal, PointLight pointLight, samplerCube shadowMap);
 
 vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir);
@@ -194,7 +197,7 @@ void main()
 	}
 
 	vec3 parallelLightDir = normalize(-parallelLight.direction);
-	float parallelShadow = parallelShadows ? ShadowCalculation(fs_in.FragPosLightSpace, N) : 0.0;
+	float parallelShadow = parallelShadows ? ShadowCalculation(fs_in.FragPosLightSpace, fs_in.FragPos) : 0.0;
 	vec3 parallelColor = CalParallelLight(parallelLight, norm, viewDir, parallelLightDir, texColor.rgb, parallelShadow, roughness, metallic);
 
     vec3 ambient = vec3(0.0);
@@ -271,43 +274,56 @@ vec3 CalParallelLight(ParallelLight parallelLight, vec3 norm, vec3 viewDir, vec3
     return parallelLightColor;
 }
 
-float ShadowCalculation(vec4 FragPosLightSpace, vec3 n)
+float ShadowCalculation(vec4 FragPosLightSpace, vec3 worldPos)
 {
-	// perform perspective divide
-    vec3 projCoords = FragPosLightSpace.xyz / FragPosLightSpace.w;
-    // transform to [0,1] range
-    projCoords = projCoords * 0.5 + 0.5;
-    if (any(lessThan(projCoords, vec3(0.0))) || any(greaterThan(projCoords, vec3(1.0))))
+    vec3 projCoords = FragPosLightSpace.xyz / FragPosLightSpace.w * 0.5 + 0.5;
+    // Differentiate world positions before projection: differences between
+    // nearly equal shadow UVs lose precision when the coverage is very large.
+    // Use the geometric plane, independent of interpolated/normal-map normals.
+    vec3 planeNormal = directionalShadowNormalMatrix * cross(dFdx(worldPos), dFdy(worldPos));
+    vec2 depthGradient = vec2(0.0);
+    if (abs(planeNormal.z) > 1e-12)
+        depthGradient = -planeNormal.xy / planeNormal.z;
+
+    float cameraDepth = dot(directionalShadowCameraDepth, vec4(worldPos, 1.0));
+    float endDistance = max(directionalShadowDistance, 0.001);
+    float visibility = 1.0 - smoothstep(0.8 * endDistance, endDistance, cameraDepth);
+    if (visibility <= 0.0 || any(lessThan(projCoords, vec3(0.0))) ||
+        any(greaterThan(projCoords, vec3(1.0))))
         return 0.0;
 
-    // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
-    float closestDepth = texture(depthMap, projCoords.xy).r;
-    // get depth of current fragment from light's perspective
-    float currentDepth = projCoords.z;
-    // calculate bias (based on depth map resolution and slope)
-    vec3 lightDir = normalize(-parallelLight.direction);
-    // World-space bias stays constant as the fitted depth range changes.
-    float bias = max(0.05 * (1.0 - dot(n, lightDir)), 0.005) * directionalShadowInvDepthRange;
-    // check whether current frag pos is in shadow
-    // float shadow = currentDepth - bias > closestDepth  ? 1.0 : 0.0;
-    // PCF
+    ivec2 mapSize = textureSize(depthMap, 0);
+    vec2 texelSize = 1.0 / vec2(mapSize);
+    vec2 edgeDistance = min(projCoords.xy, 1.0 - projCoords.xy);
+    visibility *= smoothstep(0.0, 3.0 * max(texelSize.x, texelSize.y),
+                             min(edgeDistance.x, edgeDistance.y));
+
+    // Only a small residual offset is needed for floating-point/rasterization
+    // error. The receiver-plane correction handles slope and PCF footprint.
+    float bias = max(0.001 * directionalShadowInvDepthRange, 0.000002);
+    // Rasterization quantizes projected vertices to a subpixel grid. Its
+    // residual plane error grows with depth change per shadow texel.
+    bias += 0.01 * dot(abs(depthGradient), texelSize);
+    ivec2 centerTexel = ivec2(floor(projCoords.xy * vec2(mapSize)));
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(depthMap, 0);
-    for(int x = -1; x <= 1; ++x)
+    for (int x = -1; x <= 1; ++x)
     {
-        for(int y = -1; y <= 1; ++y)
+        for (int y = -1; y <= 1; ++y)
         {
-            float pcfDepth = texture(depthMap, projCoords.xy + vec2(x, y) * texelSize).r;
-            shadow += currentDepth - bias > pcfDepth  ? 1.0 : 0.0;
+            ivec2 sampleTexel = centerTexel + ivec2(x, y);
+            if (any(lessThan(sampleTexel, ivec2(0))) ||
+                any(greaterThanEqual(sampleTexel, mapSize)))
+                continue;
+            // Compare at the actual texel center, including nearest-sampling
+            // quantization, instead of testing every tap against the same Z.
+            vec2 sampleUV = (vec2(sampleTexel) + 0.5) * texelSize;
+            float receiverDepth = projCoords.z + dot(depthGradient, sampleUV - projCoords.xy);
+            float storedDepth = texelFetch(depthMap, sampleTexel, 0).r;
+            if (storedDepth < 1.0 && receiverDepth - bias > storedDepth)
+                shadow += 1.0;
         }
     }
-    shadow /= 9.0;
-
-    // keep the shadow at 0.0 when outside the far_plane region of the light's frustum.
-    if(projCoords.z > 1.0)
-        shadow = 0.0;
-
-    return shadow;
+    return visibility * shadow / 9.0;
 }
 
 // pointLight

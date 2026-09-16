@@ -15,7 +15,9 @@ void RenderTargets::initialize(RenderExtent extent, unsigned int shadowSize, Col
 
     desc.extent = { shadowSize, shadowSize };
     desc.colors.clear();
-    desc.depth = { DepthStorage::Texture2D, DepthFormat::Depth, DepthWrap::ClampToBorder };
+    // Explicit precision: unsized GL_DEPTH_COMPONENT may choose 16 bits, which
+    // quantizes large directional shadow ranges more than the residual bias.
+    desc.depth = { DepthStorage::Texture2D, DepthFormat::Depth24, DepthWrap::ClampToBorder };
     desc.debugName = "Directional Shadow";
     replacement.directionalShadow = std::make_unique<FrameBuffer>(desc);
 

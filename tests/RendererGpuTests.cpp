@@ -240,7 +240,97 @@ namespace
                 const auto shadow = readPixel(output.colorTexture, output.extent);
                 require(lit[0] > shadow[0] + 0.1f, "off-camera caster failed to shadow the receiver after camera movement");
             }
-        std::cout << "Directional shadow pixel checks passed.\n";
+        // No blocker: enabling shadows must not darken an otherwise lit floor,
+        // even at grazing camera/light angles and large shadow-map footprints.
+        const auto floorPath = directory / "shadow-floor.obj";
+        {
+            std::ofstream obj(floorPath);
+            obj << "v -25 0 -25\nv -25 0 25\nv 25 0 25\nv 25 0 -25\nvn 0 1 0\n"
+                   "f 1//1 2//1 3//1\nf 1//1 3//1 4//1\n"
+                   "f 3//1 2//1 1//1\nf 4//1 3//1 1//1\n";
+        }
+        const auto floor = std::make_shared<Model>(floorPath.generic_string());
+        for (bool deferred : {false, true})
+            for (bool importedFloor : {false, true})
+                for (float distance : {1.0f, 5.3f, 13.9f, 100.0f, 1000.0f})
+                {
+                    const float offset = importedFloor ? 300.0f : 0.0f;
+                    RenderScene scene;
+                    scene.environmentMode = EnvironmentMode::Disabled;
+                    scene.directionalLight.direction = {-2.2f, -0.5f, -2.3f};
+                    if (importedFloor)
+                        scene.objects.push_back({floor, glm::translate(glm::mat4(1), {offset, -5.5f, 0}) *
+                            glm::scale(glm::mat4(1), glm::vec3(10)), {}});
+                    CameraData camera;
+                    camera.position = {offset, -4.8f, 3};
+                    camera.farPlane = 1000;
+                    camera.view = glm::lookAt(camera.position, glm::vec3(offset, -5.5f, -8), glm::vec3(0, 1, 0));
+                    camera.projection = glm::perspective(glm::radians(45.0f), 64.0f / 48.0f, 0.1f, 1000.0f);
+                    RenderSettings settings;
+                    settings.deferred = deferred;
+                    settings.groundPlane.visible = !importedFloor;
+                    settings.directionalShadowDistance = distance;
+                    const auto capture = [&]() {
+                        const auto output = renderer.render(scene, camera, settings, {0, true, false});
+                        verifyOutput(output, {64, 48});
+                        std::vector<float> pixels(64 * 48 * 4);
+                        glBindTexture(GL_TEXTURE_2D, output.colorTexture);
+                        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, pixels.data());
+                        return pixels;
+                    };
+                    const auto lit = capture();
+                    settings.shadows = true;
+                    const auto shadowed = capture();
+                    float maxDarkening = 0;
+                    for (std::size_t i = 0; i < lit.size(); i += 4)
+                        maxDarkening = std::max(maxDarkening, lit[i] - shadowed[i]);
+                    if (maxDarkening > 0.025f)
+                        std::cerr << "Floor acne: deferred=" << deferred << " imported=" << importedFloor
+                            << " distance=" << distance << " darkening=" << maxDarkening << '\n';
+                    require(maxDarkening <= 0.025f, "unoccluded floor developed false shadow stripes/rectangle");
+                }
+
+        // A real shadow must fade continuously as the camera retreats through
+        // the distance limit, rather than disappearing at a light-space box edge.
+        for (bool deferred : {false, true})
+        {
+            RenderScene scene;
+            scene.environmentMode = EnvironmentMode::Disabled;
+            scene.directionalLight.direction = {0, 0, -1};
+            scene.objects.push_back({receiver, glm::scale(glm::mat4(1), glm::vec3(10)), {}});
+            scene.objects.push_back({caster, glm::translate(glm::mat4(1), {0, 0, 200}) *
+                glm::scale(glm::mat4(1), glm::vec3(3)), {}});
+            RenderSettings settings;
+            settings.deferred = deferred;
+            settings.shadows = true;
+            settings.directionalShadowDistance = 10;
+            float previous = -1, fullyShadowed = 0, intermediate = 0, finalValue = 0;
+            for (float depth : {7.5f, 8.2f, 8.6f, 9.0f, 9.4f, 9.8f, 10.2f})
+            {
+                CameraData camera;
+                camera.position = {0, 0, depth};
+                camera.farPlane = 1000;
+                camera.view = glm::lookAt(camera.position, glm::vec3(0), glm::vec3(0, 1, 0));
+                camera.projection = glm::perspective(glm::radians(45.0f), 64.0f / 48.0f, 0.1f, 1000.0f);
+                const auto output = renderer.render(scene, camera, settings, {0, true, false});
+                const float value = readPixel(output.colorTexture, output.extent)[0];
+                require(value >= previous - 0.01f, "shadow distance transition is not monotonic");
+                previous = value;
+                if (depth == 7.5f) fullyShadowed = value;
+                if (depth == 9.0f) intermediate = value;
+                if (depth == 10.2f)
+                {
+                    finalValue = value;
+                    settings.shadows = false;
+                    const auto unshadowed = renderer.render(scene, camera, settings, {0, true, false});
+                    require(std::abs(readPixel(unshadowed.colorTexture, unshadowed.extent)[0] - value) < 0.01f,
+                        "shadow persists beyond camera shadow distance");
+                }
+            }
+            require(intermediate > fullyShadowed + 0.05f && intermediate < finalValue - 0.02f,
+                "shadow has no gradual transition before disappearing");
+        }
+        std::cout << "Directional shadow pixel checks passed (occlusion, floor acne, distance fade).\n";
     }
 
     PFNGLCREATESHADERPROC originalCreateShader;

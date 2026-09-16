@@ -87,6 +87,11 @@ void ForwardPass::execute(const GpuRenderScene &scene, const RenderPassContext &
     modelShader->setUniform("parallelLight.enabled", directionalLightEnabled);
     modelShader->setUniform("lightSpaceMatrix", context.lightSpaceMatrix);
     modelShader->setUniform("directionalShadowInvDepthRange", 1.0f / context.directionalShadowDepthRange);
+    modelShader->setUniform("directionalShadowNormalMatrix",
+        glm::transpose(glm::inverse(glm::mat3(context.lightSpaceMatrix))));
+    modelShader->setUniform("directionalShadowDistance", std::min(settings.directionalShadowDistance, camera.farPlane));
+    modelShader->setUniform("directionalShadowCameraDepth", glm::vec4(-camera.view[0][2],
+        -camera.view[1][2], -camera.view[2][2], -camera.view[3][2]));
     modelShader->setUniform("parallelShadows", directionalShadowEnabled);
     modelShader->setUniform("pointShadows", pointShadowEnabled);
     modelShader->setUniform("pointLightCount", static_cast<int>(pointLightCount));

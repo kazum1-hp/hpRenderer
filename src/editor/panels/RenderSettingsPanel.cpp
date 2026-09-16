@@ -14,7 +14,11 @@ void RenderSettingsPanel::draw(RenderSettings& settings, InputManager& input)
     ImGui::SameLine();
     ImGui::Checkbox("drawLights", &settings.drawLights);
     if (settings.shadows)
+    {
         ImGui::SliderFloat("Sun Shadow Distance", &settings.directionalShadowDistance, 1.0f, 1000.0f, "%.1f");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Camera-forward coverage in world units. Shadows fade over the last 20%%.\nLarger distances cover more of the scene with less detail.");
+    }
 
     ImGui::Checkbox("drawPlane", &settings.groundPlane.visible);
 

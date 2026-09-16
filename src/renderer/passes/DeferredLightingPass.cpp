@@ -3,6 +3,7 @@
 #include "hpr/renderer/opengl/Mesh.h"
 #include "hpr/renderer/RenderLimits.h"
 #include <string>
+#include <algorithm>
 
 namespace Rendering
 {
@@ -90,6 +91,7 @@ void DeferredLightingPass::execute(const GpuRenderScene &scene, const RenderPass
 
     // uniform settings
     lightPassShader->setUniform("viewPos", camera.position);
+    lightPassShader->setUniform("inverseViewProjection", glm::inverse(camera.projection * camera.view));
 
     // light
     lightPassShader->setUniform("useQuadratic", settings.quadraticAttenuation);
@@ -101,6 +103,11 @@ void DeferredLightingPass::execute(const GpuRenderScene &scene, const RenderPass
     lightPassShader->setUniform("parallelLight.enabled", directionalLightEnabled);
     lightPassShader->setUniform("lightSpaceMatrix", context.lightSpaceMatrix);
     lightPassShader->setUniform("directionalShadowInvDepthRange", 1.0f / context.directionalShadowDepthRange);
+    lightPassShader->setUniform("directionalShadowNormalMatrix",
+        glm::transpose(glm::inverse(glm::mat3(context.lightSpaceMatrix))));
+    lightPassShader->setUniform("directionalShadowDistance", std::min(settings.directionalShadowDistance, camera.farPlane));
+    lightPassShader->setUniform("directionalShadowCameraDepth", glm::vec4(-camera.view[0][2],
+        -camera.view[1][2], -camera.view[2][2], -camera.view[3][2]));
     lightPassShader->setUniform("parallelShadows", directionalShadowEnabled);
     lightPassShader->setUniform("pointShadows", pointShadowEnabled);
     lightPassShader->setUniform("pointLightCount", static_cast<int>(pointLightCount));
